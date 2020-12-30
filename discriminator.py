@@ -2,16 +2,16 @@ import torch
 import torch.nn as nn
 
 
-class ConvTransposeBlock(nn.Module):
+class ConvBlock(nn.Module):
     """
     Basic block of our model, includes Sequential model of conv layer -> batch normalization -> Relu activation
     This block keeps the original dimension
     """
     def __init__(self, channels, num_filters, filter_size, activation='relu', stride=1, padding=1):
-        super(ConvTransposeBlock, self).__init__()
-        self.block = nn.Sequential(nn.ConvTranspose2d(channels, num_filters, kernel_size=filter_size, padding=padding, stride=stride),
+        super(ConvBlock, self).__init__()
+        self.block = nn.Sequential(nn.Conv2d(channels, num_filters, kernel_size=filter_size, padding=padding, stride=stride),
                                    nn.BatchNorm2d(num_filters),
-                                   nn.ReLU(inplace=True) if activation == 'relu' else nn.Identity())
+                                   nn.LeakyReLU(0.2, inplace=True) if activation == 'relu' else nn.Identity())
 
     def forward(self, inputs):
         outputs = self.block(inputs)
@@ -22,12 +22,12 @@ class ResidualBlock(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
         self.in_channels, self.out_channels = in_channels, out_channels
-        self.conv_block1 = ConvTransposeBlock(in_channels, in_channels, 1, padding=0)
-        self.conv_block2 = ConvTransposeBlock(in_channels, in_channels, 4, stride=2)
-        self.conv_block3 = ConvTransposeBlock(in_channels, out_channels, 1, padding=0, activation='none')
-        self.skip_block = nn.Sequential(nn.ConvTranspose2d(in_channels=in_channels, out_channels=out_channels, kernel_size=2, stride=2, padding=0, bias=False),
+        self.conv_block1 = ConvBlock(in_channels, in_channels, 1, padding=0)
+        self.conv_block2 = ConvBlock(in_channels, in_channels, 3, stride=2)
+        self.conv_block3 = ConvBlock(in_channels, out_channels, 1, padding=0, activation='none')
+        self.skip_block = nn.Sequential(nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=1, stride=2, padding=0, bias=False),
                                         nn.BatchNorm2d(out_channels))
-        self.activation = nn.ReLU()
+        self.activation = nn.LeakyReLU(0.2, inplace=True)
 
     def forward(self, x):
         residual = x
@@ -77,40 +77,29 @@ class SelfAttentionLayer(nn.Module):
         return out, attention
 
 
-class GeneratorBlock(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        super().__init__()
-        self.res_block = ResidualBlock(in_channels, out_channels)
-        self.features_conv_block = ConvTransposeBlock(in_channels, out_channels, 4, stride=2)
-
-    def forward(self, gen, features):
-        gen = self.res_block(gen)
-        features = self.features_conv_block(features)
-        return gen + features
-
-
-class Generator(nn.Module):
+class Discriminator(nn.Module):
     def __init__(self):
         super().__init__()
-        self.gen_block1 = GeneratorBlock(2048, 1024)
-        self.gen_block2 = GeneratorBlock(1024, 512)
-        self.gen_block3 = GeneratorBlock(512, 256)
+        self.first_conv = nn.Conv2d(3, 64, kernel_size=7, padding=3, stride=2)
+        self.res_block1 = ResidualBlock(64, 256)
         self.attn1 = SelfAttentionLayer(in_dim=256)
-        self.gen_block4 = GeneratorBlock(256, 64)
-        self.last_conv = nn.ConvTranspose2d(64, 3, kernel_size=8, padding=3, stride=2)
-        # self.tanh = nn.Tanh()
-        self.conv_block1 = ConvTransposeBlock(3, 3, 3, stride=1, padding=1)
-        self.conv_block2 = ConvTransposeBlock(3, 3, 3, stride=1, padding=1)
+        self.res_block2 = ResidualBlock(256, 512)
+        self.res_block3 = ResidualBlock(512, 1024)
+        self.res_block4 = ResidualBlock(1024, 2048)
+        self.avg_pool = nn.AdaptiveAvgPool2d(output_size=(1, 1))
+        self.flat = nn.Flatten()
+        self.fc = nn.Linear(in_features=2048, out_features=1)
+        self.sigmoid = nn.Sigmoid()
 
-    def forward(self, noise, features):
-        # noise has dimension 2048 * 7 * 7 (TODO: check adding layer here)
-        x = self.gen_block1(noise, features[3])
-        x = self.gen_block2(x, features[2])
-        x = self.gen_block3(x, features[1])
+    def forward(self, x):
+        x = self.first_conv(x)
+        x = self.res_block1(x)
         x, _ = self.attn1(x)
-        x = self.gen_block4(x, features[0])
-        x = self.last_conv(x)
-        # x = self.tanh(x)
-        x = self.conv_block1(x)
-        x = self.conv_block2(x)
+        x = self.res_block2(x)
+        x = self.res_block3(x)
+        x = self.res_block4(x)
+        x = self.avg_pool(x)
+        x = self.flat(x)
+        x = self.fc(x)
+        x = self.sigmoid(x)
         return x

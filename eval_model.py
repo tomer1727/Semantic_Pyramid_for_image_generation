@@ -77,7 +77,8 @@ def _main():
     classifier = torch.load('./classifier')
     classifier.eval()
     generator = Generator()
-    generator.load_state_dict(torch.load('./tanh16/tanh16_200'))
+    generator.load_state_dict(torch.load('./sanityGD/sanityGD_200'))
+    # generator.load_state_dict(torch.load('./tanh16/tanh16_200'))
 
     generator.eval()
     classifier.to(device)
@@ -101,11 +102,12 @@ def _main():
         in_image = Image.open(paths[0])
         in_image = loader(in_image)
         image_to_save = tensor_to_pil(image_to_show)
-        in_image.save('./output_images/in{}.jpg'.format(i))
-        image_to_save.save('./output_images/out{}.jpg'.format(i))
+        in_image.save('./output_images2/in{}.jpg'.format(i))
+        image_to_save.save('./output_images2/out{}.jpg'.format(i))
         i += 1
         if i == 10:
             print(np.array(image_to_save))
+            print(image_to_show.numpy())
             return
 
 
