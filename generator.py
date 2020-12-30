@@ -2,6 +2,10 @@ import torch
 import torch.nn as nn
 
 
+#######################################################
+# ConvTransBlock:                                     #
+#######################################################
+
 class ConvTransposeBlock(nn.Module):
     """
     Basic block of our model, includes Sequential model of conv layer -> batch normalization -> Relu activation
@@ -17,6 +21,9 @@ class ConvTransposeBlock(nn.Module):
         outputs = self.block(inputs)
         return outputs
 
+#######################################################
+# ResidualBlock:                                      #
+#######################################################
 
 class ResidualBlock(nn.Module):
     def __init__(self, in_channels, out_channels):
@@ -40,6 +47,9 @@ class ResidualBlock(nn.Module):
         x = self.activation(x)
         return x
 
+#######################################################
+# SelfAttentionLayer:                                 #
+#######################################################
 
 class SelfAttentionLayer(nn.Module):
     """ Self attention Layer"""
@@ -76,6 +86,9 @@ class SelfAttentionLayer(nn.Module):
         out = self.gamma * out + x
         return out, attention
 
+#######################################################
+# GeneratorBlock:                                     #
+#######################################################
 
 class GeneratorBlock(nn.Module):
     def __init__(self, in_channels, out_channels):
@@ -88,6 +101,9 @@ class GeneratorBlock(nn.Module):
         features = self.features_conv_block(features)
         return gen + features
 
+#######################################################
+# Generator Module:                                   #
+#######################################################
 
 class Generator(nn.Module):
     def __init__(self):
@@ -98,7 +114,7 @@ class Generator(nn.Module):
         self.attn1 = SelfAttentionLayer(in_dim=256)
         self.gen_block4 = GeneratorBlock(256, 64)
         self.last_conv = nn.ConvTranspose2d(64, 3, kernel_size=8, padding=3, stride=2)
-        # self.tanh = nn.Tanh()
+        self.tanh = nn.Tanh()
         self.conv_block1 = ConvTransposeBlock(3, 3, 3, stride=1, padding=1)
         self.conv_block2 = ConvTransposeBlock(3, 3, 3, stride=1, padding=1)
 
@@ -110,7 +126,7 @@ class Generator(nn.Module):
         x, _ = self.attn1(x)
         x = self.gen_block4(x, features[0])
         x = self.last_conv(x)
-        # x = self.tanh(x)
+        x = self.tanh(x)
         x = self.conv_block1(x)
         x = self.conv_block2(x)
         return x

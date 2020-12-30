@@ -2,6 +2,10 @@ import torch
 import torch.nn as nn
 
 
+#######################################################
+# ConvBlock:                                          #
+#######################################################
+
 class ConvBlock(nn.Module):
     """
     Basic block of our model, includes Sequential model of conv layer -> batch normalization -> Relu activation
@@ -17,6 +21,9 @@ class ConvBlock(nn.Module):
         outputs = self.block(inputs)
         return outputs
 
+#######################################################
+# ResidualBlock:                                      #
+#######################################################
 
 class ResidualBlock(nn.Module):
     def __init__(self, in_channels, out_channels):
@@ -40,6 +47,9 @@ class ResidualBlock(nn.Module):
         x = self.activation(x)
         return x
 
+#######################################################
+# SelfAttentionLayer:                                 #
+#######################################################
 
 class SelfAttentionLayer(nn.Module):
     """ Self attention Layer"""
@@ -76,28 +86,46 @@ class SelfAttentionLayer(nn.Module):
         out = self.gamma * out + x
         return out, attention
 
+#######################################################
+# DiscBlock:                                          #
+#######################################################
+
+class DiscBlock(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super().__init__()
+        self.res_block = ResidualBlock(in_channels, out_channels)
+        self.features_conv_block = ConvBlock(in_channels, out_channels, 4, stride=2)
+
+    def forward(self, gen, features):
+        gen = self.res_block(gen)
+        features = self.features_conv_block(features)
+        return gen + features
+
+#######################################################
+# Discriminator Module:                                   #
+#######################################################
 
 class Discriminator(nn.Module):
     def __init__(self):
         super().__init__()
         self.first_conv = nn.Conv2d(3, 64, kernel_size=7, padding=3, stride=2)
-        self.res_block1 = ResidualBlock(64, 256)
+        self.res_block1 = DiscBlock(64, 256)
         self.attn1 = SelfAttentionLayer(in_dim=256)
-        self.res_block2 = ResidualBlock(256, 512)
-        self.res_block3 = ResidualBlock(512, 1024)
-        self.res_block4 = ResidualBlock(1024, 2048)
+        self.res_block2 = DiscBlock(256, 512)
+        self.res_block3 = DiscBlock(512, 1024)
+        self.res_block4 = DiscBlock(1024, 2048)
         self.avg_pool = nn.AdaptiveAvgPool2d(output_size=(1, 1))
         self.flat = nn.Flatten()
         self.fc = nn.Linear(in_features=2048, out_features=1)
         self.sigmoid = nn.Sigmoid()
 
-    def forward(self, x):
+    def forward(self, x, features):
         x = self.first_conv(x)
-        x = self.res_block1(x)
+        x = self.res_block1(x, features[0])
         x, _ = self.attn1(x)
-        x = self.res_block2(x)
-        x = self.res_block3(x)
-        x = self.res_block4(x)
+        x = self.res_block2(x, features[1])
+        x = self.res_block3(x, features[2])
+        x = self.res_block4(x, features[3])
         x = self.avg_pool(x)
         x = self.flat(x)
         x = self.fc(x)

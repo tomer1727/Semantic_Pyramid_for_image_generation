@@ -62,11 +62,11 @@ def _main():
     clf.eval()
 
     # load the image transformer
-    centre_crop = transforms.Compose([
+    adjustImage = transforms.Compose([
             transforms.Resize((256, 256)),
             transforms.CenterCrop(224),
             transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+            transforms.Normalize(mean = [0.485, 0.456, 0.406], std = [0.229, 0.224, 0.225])
     ])
 
     # load the class label
@@ -77,11 +77,15 @@ def _main():
             classes.append(line.strip().split(' ')[0][3:])
     classes = tuple(classes)
 
+    #######################################################
+    # Optional code:                                      #
+    #######################################################
+
     # load the test image
     img_name = r"C:\Users\tomer\OneDrive\Desktop\00004953.jpg"
 
     img = Image.open(img_name)
-    input_img = Variable(centre_crop(img).unsqueeze(0))
+    input_img = Variable(adjustImage(img).unsqueeze(0))
 
     # forward pass model
     logit = model.forward(input_img)
