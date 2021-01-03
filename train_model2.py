@@ -65,8 +65,9 @@ def _main():
     classifier = torch.load("./classifier18")
     classifier.eval()
     generator = Generator()
-    # generator.load_state_dict(torch.load('./exp/expG_400'))
+    generator.load_state_dict(torch.load('./expc/expcG'))
     discriminator = Discriminator()
+    discriminator.load_state_dict(torch.load('./expc/expcD'))
     if torch.cuda.device_count() > 1:
         classifier = nn.DataParallel(classifier)
         generator = nn.DataParallel(generator)
@@ -76,15 +77,15 @@ def _main():
     discriminator.to(device)
 
     # weights init
-    generator.init_weights()
-    discriminator.init_weights()
+    # generator.init_weights()
+    # discriminator.init_weights()
 
     # losses + optimizers
     criterion_features = nn.L1Loss()
     criterion_bce_g = nn.BCELoss()
     criterion_bce_d = nn.BCELoss()
-    optimizer_generator = optim.Adam(generator.parameters(), lr=args.lr, betas=(0.5, 0.999))
-    optimizer_discriminator = optim.Adam(discriminator.parameters(), lr=4*args.lr, betas=(0.5, 0.999))
+    optimizer_generator = optim.Adam(generator.parameters(), lr=args.lr, betas=(0.5, 0.99))
+    optimizer_discriminator = optim.Adam(discriminator.parameters(), lr=3*args.lr, betas=(0.5, 0.99))
 
     num_of_epochs = args.epochs
 
@@ -123,17 +124,16 @@ def _main():
             # loss_adversarial.backward()
             total_loss = loss_adversarial
             # optimizer_generator.step()  # modify weights
-            if iterations % 4 == 2:
-                _, outputs_images_features = classifier(fake_images)
-                loss_features = criterion_features(features[0], outputs_images_features[0])
-                for i in range(1, len(features) - 1):
-                    loss_features += criterion_features(features[i], outputs_images_features[i])  # calculate loss
-                # loss_features += criterion_features(images, fake_images)
-                # loss_features.backward()
-                if iterations % 40 == 2:
-                    print('features loss: {:.6f}'.format(loss_features.item()))
-                total_loss += loss_features
-                del outputs_images_features
+            _, outputs_images_features = classifier(fake_images)
+            loss_features = criterion_features(features[0], outputs_images_features[0])
+            for i in range(1, len(features) - 1):
+                loss_features += criterion_features(features[i], outputs_images_features[i])  # calculate loss
+            # loss_features += criterion_features(images, fake_images)
+            # loss_features.backward()
+            if iterations % 40 == 2:
+                print('features loss: {:.6f}'.format(loss_features.item()))
+            total_loss += loss_features
+            del outputs_images_features
 
             total_loss.backward()
             optimizer_generator.step()  # modify weights
@@ -149,7 +149,7 @@ def _main():
                 flip = torch.rand(1)[0] > 0.75
                 flip = flip.item()
                 if flip:
-                    label[random.randint(0, args.batch_size - 1)] = fake_label
+                    label[random.randint(0, images.shape[0] - 1)] = fake_label
                 std = 0.1 / (iterations // 1000 + 1)
                 white_noise = (torch.randn(images.shape[0], 3, 224, 224, device=device)) * std
                 images = images + white_noise
@@ -162,7 +162,7 @@ def _main():
                 label += (torch.randn(images.shape[0], device=device)) * 0.04
                 label = torch.max(torch.zeros(images.shape[0], device=device), label)
                 if flip:
-                    label[random.randint(0, args.batch_size - 1)] = real_label_D
+                    label[random.randint(0, images.shape[0] - 1)] = real_label_D
                 fake_images = fake_images + white_noise
                 output = discriminator(fake_images.detach()).view(-1) # forward pass
                 acc += torch.sum(output < 0.5)
