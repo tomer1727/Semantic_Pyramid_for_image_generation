@@ -88,7 +88,7 @@ def _main():
     classifier.to(device)
     generator.to(device)
 
-    noise = torch.zeros(1, 256, 1, 1, device=torch.device('cuda:0'))
+    # noise = torch.zeros(1, 256, 1, 1, device=torch.device('cuda:0'))
 
     print("Starting Eval Loop...")
     train_loss = 0.0  # monitor training loss
@@ -97,22 +97,24 @@ def _main():
         images, _, paths = data
         images = images.cuda()  # change to gpu tensor
         _, features = classifier(images)
-        # features = features[1:5] # for now working with res blocks only
+        noise = torch.randn(images.shape[0], 256, 1, 1, device=device)
+        generator.eval()
         outputs_images = generator(noise, features)  # forward pass
         outputs_images = 0.5 * (outputs_images + 1)
         image_to_show = outputs_images[0]
-        # image_to_show = image_to_show.detach().cpu()
-        # print_images_with_output(images[0].detach().cpu().numpy(), image_to_show.numpy(), 'hi')
         in_image = Image.open(paths[0])
         in_image = loader(in_image)
-        # image_to_save = image_to_show
         in_image.save('./output_images3/in{}.jpg'.format(i))
-        save_image(image_to_show.detach().cpu(), './output_images3/out{}.jpg'.format(i))
-        # image_to_save.save('./output_images2/out{}.jpg'.format(i))
+        save_image(image_to_show.detach().cpu(), './output_images3/out_full_features_num_{}.jpg'.format(i))
+        for features_layer in range(len(features)-1):
+            one_level_features = [torch.zeros(features[x].shape, device=device) for x in range(len(features)-1)]
+            one_level_features[features_layer] = features[features_layer]
+            outputs_images = generator(noise, one_level_features)  # forward pass
+            outputs_images = 0.5 * (outputs_images + 1)
+            image_to_show = outputs_images[0]
+            save_image(image_to_show.detach().cpu(), './output_images3/out_features_layer_{}_num_{}.jpg'.format(features_layer, i))
         i += 1
         if i == 10:
-            # print(np.array(image_to_save))
-            # print(image_to_show.numpy())
             return
 
 

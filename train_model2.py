@@ -104,6 +104,7 @@ def _main():
                 starting_time = time.time()
             images, _ = data
             images = images.to(device)  # change to gpu tensor
+
             # generator update
             # optimizer_generator.zero_grad()  # zeros previous grads
             generator.zero_grad()
@@ -112,6 +113,11 @@ def _main():
             #     del noise
             # (torch.randn(images.shape[0], 3, 224, 224, device=device)) * std
             noise = torch.randn(images.shape[0], 256, 1, 1, device=device)
+            features_to_train = random.randint(0, len(features) - 2)
+            features = list(features)
+            for i in range(len(features)):
+                if i != features_to_train:
+                    features[i] = torch.zeros(features[i].shape, device=device)
             fake_images = generator(noise, features)
             fake_images = 0.5 * (fake_images + 1)
             fake_images = normalizer(fake_images)
@@ -125,13 +131,13 @@ def _main():
             total_loss = loss_adversarial
             # optimizer_generator.step()  # modify weights
             _, outputs_images_features = classifier(fake_images)
-            loss_features = criterion_features(features[0], outputs_images_features[0])
-            for i in range(1, len(features) - 1):
-                loss_features += criterion_features(features[i], outputs_images_features[i])  # calculate loss
+            loss_features = criterion_features(features[features_to_train], outputs_images_features[features_to_train])
+            # for i in range(1, len(features) - 1):
+            #     loss_features += criterion_features(features[i], outputs_images_features[i])  # calculate loss
             # loss_features += criterion_features(images, fake_images)
             # loss_features.backward()
-            if iterations % 40 == 2:
-                print('features loss: {:.6f}'.format(loss_features.item()))
+            if iterations % 20 == 2:
+                print('features to train: {}, features loss: {:.6f}'.format(features_to_train, loss_features.item()))
             total_loss += loss_features
             del outputs_images_features
 
@@ -172,7 +178,8 @@ def _main():
                 discriminator_loss = loss_real + loss_fake
                 # discriminator_loss.backward()
                 optimizer_discriminator.step()
-                print('discriminator accuracy:', acc_np, '/', args.batch_size * 2)
+                if iterations % 6 == 1:
+                    print('discriminator accuracy:', acc_np, '/', args.batch_size * 2)
                 del white_noise
                 del loss_fake
                 del loss_real
