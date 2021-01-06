@@ -75,7 +75,7 @@ def _main():
         transforms.CenterCrop(cropped_image_size)])
 
     # classifier = torch.load(r"C:\Users\tomer\OneDrive\Desktop\sadna\pyramid_project\classifier")
-    classifier = torch.load('./classifier18')
+    classifier = torch.load('../try/classifier18')
     classifier.eval()
     generator = Generator()
     if args.full_model_name is not None:
@@ -99,20 +99,21 @@ def _main():
         _, features = classifier(images)
         noise = torch.randn(images.shape[0], 256, 1, 1, device=device)
         generator.eval()
-        outputs_images = generator(noise, features)  # forward pass
+        masks = [torch.ones(features[x].shape, device=device) for x in range(len(features)-1)]
+        outputs_images = generator(noise, features, masks)  # forward pass
         outputs_images = 0.5 * (outputs_images + 1)
         image_to_show = outputs_images[0]
         in_image = Image.open(paths[0])
         in_image = loader(in_image)
-        in_image.save('./output_images3/in{}.jpg'.format(i))
-        save_image(image_to_show.detach().cpu(), './output_images3/out_full_features_num_{}.jpg'.format(i))
+        in_image.save('./output_images_run_2/in{}.jpg'.format(i))
+        save_image(image_to_show.detach().cpu(), './output_images_run_2/out_full_features_num_{}.jpg'.format(i))
         for features_layer in range(len(features)-1):
-            one_level_features = [torch.zeros(features[x].shape, device=device) for x in range(len(features)-1)]
-            one_level_features[features_layer] = features[features_layer]
-            outputs_images = generator(noise, one_level_features)  # forward pass
+            masks = [torch.zeros(features[x].shape, device=device) for x in range(len(features)-1)]
+            masks[features_layer] = torch.ones(features[features_layer].shape, device=device)
+            outputs_images = generator(noise, features, masks)  # forward pass
             outputs_images = 0.5 * (outputs_images + 1)
             image_to_show = outputs_images[0]
-            save_image(image_to_show.detach().cpu(), './output_images3/out_features_layer_{}_num_{}.jpg'.format(features_layer, i))
+            save_image(image_to_show.detach().cpu(), './output_images_run_2/out_features_layer_{}_num_{}.jpg'.format(features_layer, i))
         i += 1
         if i == 10:
             return

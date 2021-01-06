@@ -11,6 +11,7 @@ import torch.nn as nn
 import argparse
 import time
 import random
+import math
 
 from classifier import Classifier
 from generator2 import Generator
@@ -41,6 +42,46 @@ def weights_init(m):
     elif classname.find('Linear') != -1:
         nn.init.normal_(m.weight.data, 0.0, 0.2)
 
+def setCroppedMask(random_crop, mask, window_len=0.45):
+    x_start = math.floor((random_crop[0]/100) * mask.shape[2])
+    y_start = math.floor((random_crop[1]/100) * mask.shape[3])
+    x_end = x_start +  math.floor(window_len * mask.shape[2])
+    y_end = y_start + math.floor(window_len * mask.shape[3])
+    #print('setCroppedMask- X:({},{}) Y:({},{})'.format(x_start,x_end,y_start,y_end))
+    mask[:,:, x_start:x_end, y_start:y_end] = 1
+    return mask
+
+
+
+def setMasksPart1(masks, device, random_layer_idx):
+    for idx,mask in enumerate(masks):
+        if idx == random_layer_idx:
+            # Pass the whole feature layer
+            masks[idx] = torch.ones(mask.shape, device=device)
+        else:
+            # Block the feature layer
+            masks[idx] = mask*0
+
+def setMasksPart2(masks, device, random_layer_idx):
+    random_crop = (random.randint(0, 50), random.randint(0, 50)) # randomize the percentage of mask indexes
+    masks[random_layer_idx] = torch.ones(masks[random_layer_idx].shape, device=device)
+    for idx,mask in enumerate(masks):
+        if idx < random_layer_idx:
+            # Pass a part of the feature layer
+            masks[idx] = setCroppedMask(random_crop, torch.zeros(mask.shape, device=device))
+        else:
+            # Block the feature layer
+            masks[idx] = mask*0
+
+def getLossByTrainType(features, masks, train_type, features_to_train, outputs_images_features):
+    criterion_features = nn.L1Loss()
+    if train_type == 1:
+        loss_features = criterion_features(features[features_to_train], outputs_images_features[features_to_train])
+    else:
+        loss_features = criterion_features(features[0]*masks[0], outputs_images_features[0]*masks[0])
+        for i in range(1, features_to_train + 1):
+            loss_features += criterion_features(features[i]*masks[i], outputs_images_features[i]*masks[i])  # calculate loss
+    return loss_features
 
 def _main():
     print_gpu_details()
@@ -62,12 +103,12 @@ def _main():
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=args.batch_size, shuffle=True, num_workers=4, pin_memory=True)
 
     # classifier = torch.load(r"C:\Users\tomer\OneDrive\Desktop\sadna\pyramid_project\classifier")
-    classifier = torch.load("./classifier18")
+    classifier = torch.load("../try/classifier18")
     classifier.eval()
     generator = Generator()
-    generator.load_state_dict(torch.load('./expc/expcG'))
+    #generator.load_state_dict(torch.load('./OnlyFeatures2Train/OnlyFeatures2TrainG'))
     discriminator = Discriminator()
-    discriminator.load_state_dict(torch.load('./expc/expcD'))
+    #discriminator.load_state_dict(torch.load('./OnlyFeatures2Train/OnlyFeatures2TrainD'))
     if torch.cuda.device_count() > 1:
         classifier = nn.DataParallel(classifier)
         generator = nn.DataParallel(generator)
@@ -77,11 +118,11 @@ def _main():
     discriminator.to(device)
 
     # weights init
-    # generator.init_weights()
-    # discriminator.init_weights()
+    generator.init_weights()
+    discriminator.init_weights()
 
     # losses + optimizers
-    criterion_features = nn.L1Loss()
+    #criterion_features = nn.L1Loss()
     criterion_bce_g = nn.BCELoss()
     criterion_bce_d = nn.BCELoss()
     optimizer_generator = optim.Adam(generator.parameters(), lr=args.lr, betas=(0.5, 0.99))
@@ -98,6 +139,8 @@ def _main():
     print("Starting Training Loop...")
     for epoch in range(num_of_epochs):
         for data in train_loader:
+            train_type = random.choices([1,2], [args.train1_prob, 1-args.train1_prob])
+
             iterations += 1
             if iterations % 100 == 1:
                 print('epoch:', epoch, ', iter', iterations, 'start, time =', time.time() - starting_time, 'seconds')
@@ -115,10 +158,12 @@ def _main():
             noise = torch.randn(images.shape[0], 256, 1, 1, device=device)
             features_to_train = random.randint(0, len(features) - 2)
             features = list(features)
-            for i in range(len(features)):
-                if i != features_to_train:
-                    features[i] = torch.zeros(features[i].shape, device=device)
-            fake_images = generator(noise, features)
+            masks = [features[i].clone() for i in range(len(features))]
+            setMasksPart1(masks, device, features_to_train) if train_type == 1 else setMasksPart2(masks, device, features_to_train)
+            # for i in range(len(features)):
+            #     if i != features_to_train:
+            #         features[i] = features[i]*0
+            fake_images = generator(noise, features, masks)
             fake_images = 0.5 * (fake_images + 1)
             fake_images = normalizer(fake_images)
 
@@ -131,13 +176,16 @@ def _main():
             total_loss = loss_adversarial
             # optimizer_generator.step()  # modify weights
             _, outputs_images_features = classifier(fake_images)
-            loss_features = criterion_features(features[features_to_train], outputs_images_features[features_to_train])
+            #loss_features = criterion_features(features[features_to_train], outputs_images_features[features_to_train])
             # for i in range(1, len(features) - 1):
             #     loss_features += criterion_features(features[i], outputs_images_features[i])  # calculate loss
             # loss_features += criterion_features(images, fake_images)
             # loss_features.backward()
+
+            loss_features = getLossByTrainType(features, masks, train_type, features_to_train, outputs_images_features)
+
             if iterations % 20 == 2:
-                print('features to train: {}, features loss: {:.6f}'.format(features_to_train, loss_features.item()))
+                print('features to train: {}, features loss: {:.6f}, train type: {}'.format(features_to_train, loss_features.item(), train_type))
             total_loss += loss_features
             del outputs_images_features
 
@@ -214,6 +262,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser('choose hyperparameters')
     parser.add_argument('--batch-size', default=16, type=int)
     parser.add_argument('--lr', default=0.0001, type=float)
+    parser.add_argument('--train1-prob', default=0.5, type=float)
     parser.add_argument('--epochs', default=20, type=int)
     parser.add_argument('--only-final', action='store_true')
     parser.add_argument('--model-name')

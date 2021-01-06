@@ -5,12 +5,12 @@ import torch.nn as nn
 def init_weights(m):
     classname = m.__class__.__name__
     if classname.find('Conv') != -1:
-        nn.init.normal_(m.weight.data, 0.0, 0.2)
+        nn.init.normal_(m.weight.data, 0.0, 0.02)
     elif classname.find('BatchNorm') != -1:
-        nn.init.normal_(m.weight.data, 1.0, 0.2)
+        nn.init.normal_(m.weight.data, 1.0, 0.02)
         nn.init.constant_(m.bias.data, 0)
     elif classname.find('Linear') != -1:
-        nn.init.normal_(m.weight.data, 0.0, 0.2)
+        nn.init.normal_(m.weight.data, 0.0, 0.02)
 
 
 class ConvTransposeBlock(nn.Module):
@@ -134,17 +134,17 @@ class Generator(nn.Module):
         # self.conv2 = nn.ConvTranspose2d(3, 3, kernel_size=3, padding=1, stride=1)
         # self.conv_block2 = ConvTransposeBlock(3, 3, 3, stride=1, padding=1)
 
-    def forward(self, noise, features):
+    def forward(self, noise, features, masks):
         # noise has dimension 256 * 1 * 1
         x = self.conv_block1(noise)
         x = self.conv_block2(x)
-        x = self.gen_block1(x, features[4])
-        x = self.gen_block2(x, features[3])
-        x = self.gen_block3(x, features[2])
+        x = self.gen_block1(x, features[4]*masks[4])
+        x = self.gen_block2(x, features[3]*masks[3])
+        x = self.gen_block3(x, features[2]*masks[2])
         # x, _ = self.attn1(x)
-        x = self.gen_block4(x, features[1])
+        x = self.gen_block4(x, features[1]*masks[1])
         # x, _ = self.attn2(x)
-        x = self.gen_block5(x, features[0])
+        x = self.gen_block5(x, features[0]*masks[0])
         x = self.last_conv(x)
         # x = self.conv_block1(x)
         # x = self.conv2(x)
