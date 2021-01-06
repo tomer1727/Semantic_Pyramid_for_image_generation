@@ -65,9 +65,9 @@ def _main():
     classifier = torch.load("./classifier18")
     classifier.eval()
     generator = Generator()
-    generator.load_state_dict(torch.load('./expc/expcG'))
+    # generator.load_state_dict(torch.load('./expc/expcG'))
     discriminator = Discriminator()
-    discriminator.load_state_dict(torch.load('./expc/expcD'))
+    # discriminator.load_state_dict(torch.load('./expc/expcD'))
     if torch.cuda.device_count() > 1:
         classifier = nn.DataParallel(classifier)
         generator = nn.DataParallel(generator)
@@ -77,8 +77,8 @@ def _main():
     discriminator.to(device)
 
     # weights init
-    # generator.init_weights()
-    # discriminator.init_weights()
+    generator.init_weights()
+    discriminator.init_weights()
 
     # losses + optimizers
     criterion_features = nn.L1Loss()
@@ -113,11 +113,11 @@ def _main():
             #     del noise
             # (torch.randn(images.shape[0], 3, 224, 224, device=device)) * std
             noise = torch.randn(images.shape[0], 256, 1, 1, device=device)
-            features_to_train = random.randint(0, len(features) - 2)
+            features_to_train = 3
             features = list(features)
             for i in range(len(features)):
                 if i != features_to_train:
-                    features[i] = torch.zeros(features[i].shape, device=device)
+                    features[i] = features[i] * 0
             fake_images = generator(noise, features)
             fake_images = 0.5 * (fake_images + 1)
             fake_images = normalizer(fake_images)
@@ -199,9 +199,12 @@ def _main():
             if iterations % 3 == 1:
                 del discriminator_loss
 
-            if iterations % 500 == 1:
+            if iterations % 1000 == 1:
                 torch.save(generator.state_dict(), './' + args.model_name + '/' + args.model_name + 'G')
                 torch.save(discriminator.state_dict(), './' + args.model_name + '/' + args.model_name + 'D')
+            if iterations % 20000 == 1:
+                torch.save(generator.state_dict(), './' + args.model_name + '/' + args.model_name + 'G_' + str(iterations // 20000))
+                torch.save(discriminator.state_dict(), './' + args.model_name + '/' + args.model_name + 'D_' + str(iterations // 20000))
 
         # print('Epoch: {}/{} \tTraining Loss: {:.6f}'.format(epoch + 1, num_of_epochs, train_loss))
         # save the model, if needed
