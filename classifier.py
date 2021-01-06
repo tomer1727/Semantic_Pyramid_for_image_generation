@@ -5,6 +5,7 @@ from torchvision import transforms
 from torch.nn import functional
 import torch.nn as nn
 from PIL import Image
+import os
 
 
 class Classifier(nn.Module):
@@ -40,15 +41,16 @@ class Classifier(nn.Module):
         avgpool = self.avgpool(layer4)
         flat = self.flat(avgpool)
         outputs = self.fc(flat)
-        return outputs, (maxpool, layer1, layer2, layer3, layer4, avgpool)
+        return outputs, (relu, layer1, layer2, layer3, layer4, avgpool)
 
 
 def _main():
     # the classifier architecture
-    arch = 'resnet50'
+    arch = 'resnet18'
 
     # pre-trained weights file path
-    model_file = r"C:\Users\tomer\OneDrive\Desktop\sadna\resnet\resnet50_places365.pth.tar"
+    model_file_dir = r"C:\Users\tomer\OneDrive\Desktop\sadna\resnet"
+    model_file = os.path.join(model_file_dir, arch+"_places365.pth.tar")
 
     # use the weights to initialize the classifier
     model = models.__dict__[arch](num_classes=365)
@@ -57,7 +59,8 @@ def _main():
     model.load_state_dict(state_dict)
 
     clf = Classifier(model)
-    torch.save(clf, r"C:\Users\tomer\OneDrive\Desktop\sadna\pyramid_project\classifier")
+    torch.save(clf, r"C:\Users\tomer\OneDrive\Desktop\sadna\pyramid_project\classifier18")
+    # torch.save(clf, "./classifier")
     model.eval()
     clf.eval()
 
@@ -78,6 +81,7 @@ def _main():
     classes = tuple(classes)
 
     # load the test image
+    # img_name = r"C:\Users\tomer\OneDrive\Desktop\12.jpg"
     img_name = r"C:\Users\tomer\OneDrive\Desktop\00004953.jpg"
 
     img = Image.open(img_name)
@@ -104,6 +108,9 @@ def _main():
     # output the prediction
     for i in range(0, 5):
         print('{:.3f} -> {}'.format(probs[i], classes[idx[i]]))
+
+    for f in features:
+        print(f.shape)
 
 
 if __name__ == '__main__':
