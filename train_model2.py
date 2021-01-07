@@ -65,7 +65,7 @@ def _main():
     classifier = torch.load("./classifier18")
     classifier.eval()
     generator = Generator()
-    # generator.load_state_dict(torch.load('./expc/expcG'))
+    generator.load_state_dict(torch.load('./full_fe2/full_fe2G'))
     discriminator = Discriminator()
     # discriminator.load_state_dict(torch.load('./expc/expcD'))
     if torch.cuda.device_count() > 1:
@@ -77,7 +77,7 @@ def _main():
     discriminator.to(device)
 
     # weights init
-    generator.init_weights()
+    # generator.init_weights()
     discriminator.init_weights()
 
     # losses + optimizers
@@ -113,7 +113,7 @@ def _main():
             #     del noise
             # (torch.randn(images.shape[0], 3, 224, 224, device=device)) * std
             noise = torch.randn(images.shape[0], 256, 1, 1, device=device)
-            features_to_train = 3
+            features_to_train = 2
             features = list(features)
             for i in range(len(features)):
                 if i != features_to_train:
@@ -138,13 +138,14 @@ def _main():
             # loss_features.backward()
             if iterations % 20 == 2:
                 print('features to train: {}, features loss: {:.6f}'.format(features_to_train, loss_features.item()))
-            total_loss += loss_features
+            total_loss += 0.25 * loss_features
             del outputs_images_features
 
             total_loss.backward()
             optimizer_generator.step()  # modify weights
 
-            if iterations % 3 == 1:
+            # if iterations % 3 == 1:
+            if True:
                 # discriminator update
                 # print('Discriminator update')
                 # optimizer_discriminator.zero_grad()
