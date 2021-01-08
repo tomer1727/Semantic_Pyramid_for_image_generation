@@ -19,7 +19,7 @@ from discriminator import Discriminator
 real_label = 1.
 fake_label = 0.
 
-def print_gpu_details():
+def PrintGpuDetails():
     """
     print gpu details to make sure gpu available
     """
@@ -28,10 +28,10 @@ def print_gpu_details():
         print('Num of GPUs:', torch.cuda.device_count())
 
 
-def weights_init(m):
+def WeightsInit(m):
     classname = m.__class__.__name__
     if classname.find('Block') != -1:
-        # m.apply(weights_init)
+        # m.apply(WeightsInit)
         return
     elif classname.find('Conv') != -1:
         nn.init.normal_(m.weight.data, 0.0, 0.02)
@@ -41,31 +41,37 @@ def weights_init(m):
     elif classname.find('Linear') != -1:
         nn.init.normal_(m.weight.data, 0.0, 0.02)
 
-
-def _main():
-    print_gpu_details()
-    device = torch.device("cuda:0" if (torch.cuda.is_available()) else "cpu")
-    train_root = args.train_path
-    # train_root = r"C:\Users\tomer\OneDrive\Documents\datasets\model2\cars\train"
-
+def LoadTrainData(train_root):
     image_size = 256
     cropped_image_size = 224
-    print("set image folder")
+    print("Setting image folder...")
     train_set = dset.ImageFolder(root=train_root,
                                  transform=transforms.Compose([
                                      transforms.Resize(image_size),
                                      transforms.CenterCrop(cropped_image_size),
                                      transforms.ToTensor(),
-                                     transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+                                     transforms.Normalize(mean = [0.485, 0.456, 0.406], std = [0.229, 0.224, 0.225])
                                  ]))
-    print('set data loader')
+    print("Setting data loader...")
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=args.batch_size, shuffle=True, num_workers=2)
+    return train_loader
+
+def _main():
+    PrintGpuDetails()
+    device = torch.device("cuda:0" if (torch.cuda.is_available()) else "cpu")
+
+    train_root = args.train_path
+    num_of_epochs = args.epochs
+    # train_root = r"C:\Users\tomer\OneDrive\Documents\datasets\model2\cars\train"
+
+    train_data = LoadTrainData(train_root)
 
     # classifier = torch.load(r"C:\Users\tomer\OneDrive\Desktop\sadna\pyramid_project\classifier")
     classifier = torch.load("./classifier")
     classifier.eval()
     generator = Generator()
     discriminator = Discriminator()
+
     if torch.cuda.device_count() > 1:
         classifier = nn.DataParallel(classifier)
         generator = nn.DataParallel(generator)
@@ -74,27 +80,26 @@ def _main():
     generator.to(device)
     discriminator.to(device)
 
-    # weights init
-    generator.apply(weights_init)
-    discriminator.apply(weights_init)
+    # Initialize weights
+    generator.apply(WeightsInit)
+    discriminator.apply(WeightsInit)
 
-    # losses + optimizers
+    # Define loss functions and optimizers
     criterion_features = nn.L1Loss()
     criterion_bce = nn.BCELoss()
     optimizer_generator = optim.Adam(generator.parameters(), lr=args.lr)
     optimizer_discriminator = optim.Adam(discriminator.parameters(), lr=args.lr)
 
-    num_of_epochs = args.epochs
-
     normalizer = transforms.Compose([
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
     noise = torch.zeros(args.batch_size, 2048, 7, 7, device=torch.device('cuda:0'))
+
     starting_time = time.time()
     print("Starting Training Loop...")
     for epoch in range(num_of_epochs):
         batch_count = 0
-        for data in train_loader:
+        for data in train_data:
             batch_count += 1
             if batch_count % 10 == 1:
                 print('epoch:', epoch, ', batch', batch_count, 'start, time =', time.time() - starting_time, 'seconds')
@@ -102,7 +107,7 @@ def _main():
             images, _ = data
             images = images.cuda()  # change to gpu tensor
             # discriminator update
-            print('Discriminator update')
+            print('Training step of Discriminator')
             optimizer_discriminator.zero_grad()
             discriminator.zero_grad()
             # real images batch
@@ -124,7 +129,7 @@ def _main():
             discriminator_loss = loss_real + loss_fake
             optimizer_discriminator.step()
             # generator update
-            print('Generator update')
+            print('Training step of Generator')
             optimizer_generator.zero_grad()  # zeros previous grads
             generator.zero_grad()
             label.fill_(real_label)
