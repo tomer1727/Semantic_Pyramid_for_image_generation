@@ -22,7 +22,7 @@ class ConvTransposeBlock(nn.Module):
         super(ConvTransposeBlock, self).__init__()
         self.block = nn.Sequential(nn.utils.spectral_norm(nn.ConvTranspose2d(channels, num_filters, kernel_size=filter_size, padding=padding, stride=stride)),
                                    nn.BatchNorm2d(num_filters),
-                                   nn.ReLU(inplace=True) if activation == 'relu' else nn.Identity())
+                                   nn.LeakyReLU(0.2, inplace=True) if activation == 'relu' else nn.Identity())
 
     def forward(self, inputs):
         outputs = self.block(inputs)
@@ -37,22 +37,27 @@ class ResidualBlock(nn.Module):
         super().__init__()
         self.in_channels, self.out_channels = in_channels, out_channels
         self.conv_block1 = ConvTransposeBlock(in_channels, in_channels, 1, padding=0)
-        self.conv_block2 = ConvTransposeBlock(in_channels, in_channels, 4, stride=2)
-        self.conv_block3 = ConvTransposeBlock(in_channels, out_channels, 1, padding=0, activation='none')
+        self.conv_block2 = ConvTransposeBlock(in_channels, out_channels, 4, stride=2, activation='none')
+        # self.conv_block3 = ConvTransposeBlock(in_channels, out_channels, 1, padding=0, activation='none')
         self.skip_block = nn.Sequential(nn.utils.spectral_norm(nn.ConvTranspose2d(in_channels=in_channels, out_channels=out_channels, kernel_size=2, stride=2, padding=0, bias=False)),
                                         nn.BatchNorm2d(out_channels))
         self.activation = nn.ReLU()
 
     def forward(self, x):
-        residual = x
-        if self.in_channels != self.out_channels:
-            residual = self.skip_block(residual)
+        # residual = x.clone()
+        # if self.in_channels != self.out_channels:
+        residual = self.skip_block(x)
         x = self.conv_block1(x)
         x = self.conv_block2(x)
-        x = self.conv_block3(x)
+        # x = self.conv_block3(x)
         x += residual
         x = self.activation(x)
         return x
+
+    def init_weights(self):
+        self.conv_block1.init_weights()
+        self.conv_block2.init_weights()
+        self.skip_block.apply(init_weights)
 
 
 class SelfAttentionLayer(nn.Module):

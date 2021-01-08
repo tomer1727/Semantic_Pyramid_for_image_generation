@@ -65,7 +65,7 @@ def _main():
     classifier = torch.load("./classifier18")
     classifier.eval()
     generator = Generator()
-    generator.load_state_dict(torch.load('./full_fe2/full_fe2G'))
+    # generator.load_state_dict(torch.load('./full_fe2/full_fe2G'))
     discriminator = Discriminator()
     # discriminator.load_state_dict(torch.load('./expc/expcD'))
     if torch.cuda.device_count() > 1:
@@ -77,15 +77,14 @@ def _main():
     discriminator.to(device)
 
     # weights init
-    # generator.init_weights()
+    generator.init_weights()
     discriminator.init_weights()
 
     # losses + optimizers
     criterion_features = nn.L1Loss()
-    criterion_bce_g = nn.BCELoss()
-    criterion_bce_d = nn.BCELoss()
+    criterion_bce = nn.BCELoss()
     optimizer_generator = optim.Adam(generator.parameters(), lr=args.lr, betas=(0.5, 0.99))
-    optimizer_discriminator = optim.Adam(discriminator.parameters(), lr=3*args.lr, betas=(0.5, 0.99))
+    optimizer_discriminator = optim.Adam(discriminator.parameters(), lr=2*args.lr, betas=(0.5, 0.99))
 
     num_of_epochs = args.epochs
 
@@ -120,17 +119,17 @@ def _main():
                     features[i] = features[i] * 0
             fake_images = generator(noise, features)
             fake_images = 0.5 * (fake_images + 1)
-            fake_images = normalizer(fake_images)
+            fake_images_normalized = normalizer(fake_images)
 
             # if iterations % 4 != 2:
             # print('Generator update')
             label = torch.full((images.shape[0],), real_label_G, dtype=torch.float, device=device)
             discriminator_preds = discriminator(fake_images).view(-1)
-            loss_adversarial = criterion_bce_g(discriminator_preds, label)
+            loss_adversarial = criterion_bce(discriminator_preds, label)
             # loss_adversarial.backward()
             total_loss = loss_adversarial
             # optimizer_generator.step()  # modify weights
-            _, outputs_images_features = classifier(fake_images)
+            _, outputs_images_features = classifier(fake_images_normalized)
             loss_features = criterion_features(features[features_to_train], outputs_images_features[features_to_train])
             # for i in range(1, len(features) - 1):
             #     loss_features += criterion_features(features[i], outputs_images_features[i])  # calculate loss
@@ -138,14 +137,14 @@ def _main():
             # loss_features.backward()
             if iterations % 20 == 2:
                 print('features to train: {}, features loss: {:.6f}'.format(features_to_train, loss_features.item()))
-            total_loss += 0.25 * loss_features
+            total_loss += 10 * loss_features
             del outputs_images_features
 
             total_loss.backward()
             optimizer_generator.step()  # modify weights
 
-            # if iterations % 3 == 1:
-            if True:
+            if iterations % 2 == 1:
+            # if True:
                 # discriminator update
                 # print('Discriminator update')
                 # optimizer_discriminator.zero_grad()
@@ -153,7 +152,7 @@ def _main():
                 # real images batch
                 label = torch.full((images.shape[0],), real_label_D, dtype=torch.float, device=device)
                 label += (torch.randn(images.shape[0], device=device)) * 0.04
-                flip = torch.rand(1)[0] > 0.75
+                flip = torch.rand(1)[0] > 1
                 flip = flip.item()
                 if flip:
                     label[random.randint(0, images.shape[0] - 1)] = fake_label
@@ -162,7 +161,7 @@ def _main():
                 images = images + white_noise
                 output = discriminator(images).view(-1) # forward pass
                 acc = torch.sum(output > 0.5)
-                loss_real = criterion_bce_d(output, label)
+                loss_real = criterion_bce(output, label)
                 loss_real.backward()
                 # fake batch
                 label.fill_(fake_label)
@@ -174,7 +173,7 @@ def _main():
                 output = discriminator(fake_images.detach()).view(-1) # forward pass
                 acc += torch.sum(output < 0.5)
                 acc_np = acc.cpu().numpy()
-                loss_fake = criterion_bce_d(output, label)
+                loss_fake = criterion_bce(output, label)
                 loss_fake.backward()
                 discriminator_loss = loss_real + loss_fake
                 # discriminator_loss.backward()
@@ -203,9 +202,9 @@ def _main():
             if iterations % 1000 == 1:
                 torch.save(generator.state_dict(), './' + args.model_name + '/' + args.model_name + 'G')
                 torch.save(discriminator.state_dict(), './' + args.model_name + '/' + args.model_name + 'D')
-            if iterations % 20000 == 1:
-                torch.save(generator.state_dict(), './' + args.model_name + '/' + args.model_name + 'G_' + str(iterations // 20000))
-                torch.save(discriminator.state_dict(), './' + args.model_name + '/' + args.model_name + 'D_' + str(iterations // 20000))
+            if iterations % 15000 == 1:
+                torch.save(generator.state_dict(), './' + args.model_name + '/' + args.model_name + 'G_' + str(iterations // 15000))
+                torch.save(discriminator.state_dict(), './' + args.model_name + '/' + args.model_name + 'D_' + str(iterations // 15000))
 
         # print('Epoch: {}/{} \tTraining Loss: {:.6f}'.format(epoch + 1, num_of_epochs, train_loss))
         # save the model, if needed
