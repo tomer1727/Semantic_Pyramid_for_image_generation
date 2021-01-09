@@ -75,8 +75,8 @@ def _main():
         transforms.CenterCrop(cropped_image_size)])
 
     # classifier = torch.load(r"C:\Users\tomer\OneDrive\Desktop\sadna\pyramid_project\classifier")
-    classifier = torch.load('../try/classifier18')
-    classifier.eval()
+    #classifier = torch.load('../try/classifier18')
+    #classifier.eval()
     generator = Generator()
     if args.full_model_name is not None:
         generator.load_state_dict(torch.load('./' + args.full_model_name))
@@ -85,7 +85,7 @@ def _main():
     # generator.load_state_dict(torch.load('./tanh16/tanh16_200'))
 
     generator.eval()
-    classifier.to(device)
+    #classifier.to(device)
     generator.to(device)
 
     # noise = torch.zeros(1, 256, 1, 1, device=torch.device('cuda:0'))
@@ -96,24 +96,24 @@ def _main():
     for data in train_loader:
         images, _, paths = data
         images = images.cuda()  # change to gpu tensor
-        _, features = classifier(images)
+        #_, features = classifier(images)
         noise = torch.randn(images.shape[0], 256, 1, 1, device=device)
         generator.eval()
-        masks = [torch.ones(features[x].shape, device=device) for x in range(len(features)-1)]
-        outputs_images = generator(noise, features, masks)  # forward pass
+        #masks = [torch.ones(features[x].shape, device=device) for x in range(len(features)-1)]
+        outputs_images = generator(noise)  # forward pass
         outputs_images = 0.5 * (outputs_images + 1)
         image_to_show = outputs_images[0]
         in_image = Image.open(paths[0])
         in_image = loader(in_image)
-        in_image.save('./output_images_run_2/in{}.jpg'.format(i))
-        save_image(image_to_show.detach().cpu(), './output_images_run_2/out_full_features_num_{}.jpg'.format(i))
-        for features_layer in range(len(features)-1):
-            masks = [torch.zeros(features[x].shape, device=device) for x in range(len(features)-1)]
-            masks[features_layer] = torch.ones(features[features_layer].shape, device=device)
-            outputs_images = generator(noise, features, masks)  # forward pass
-            outputs_images = 0.5 * (outputs_images + 1)
-            image_to_show = outputs_images[0]
-            save_image(image_to_show.detach().cpu(), './output_images_run_2/out_features_layer_{}_num_{}.jpg'.format(features_layer, i))
+        in_image.save('./output_images_run_3/in{}.jpg'.format(i))
+        save_image(image_to_show.detach().cpu(), './output_images_run_3/out_full_features_num_{}.jpg'.format(i))
+        # for features_layer in range(len(features)-1):
+        #     masks = [torch.zeros(features[x].shape, device=device) for x in range(len(features)-1)]
+        #     masks[features_layer] = torch.ones(features[features_layer].shape, device=device)
+        #     outputs_images = generator(noise, features, masks)  # forward pass
+        #     outputs_images = 0.5 * (outputs_images + 1)
+        #     image_to_show = outputs_images[0]
+        #     save_image(image_to_show.detach().cpu(), './output_images_run_2/out_features_layer_{}_num_{}.jpg'.format(features_layer, i))
         i += 1
         if i == 10:
             return

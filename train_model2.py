@@ -100,31 +100,32 @@ def _main():
                                      transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
                                  ]))
     print('set data loader')
-    train_loader = torch.utils.data.DataLoader(train_set, batch_size=args.batch_size, shuffle=True, num_workers=4, pin_memory=True)
+    train_loader = torch.utils.data.DataLoader(train_set, batch_size=args.batch_size, shuffle=True, num_workers=1, pin_memory=True)
 
     # classifier = torch.load(r"C:\Users\tomer\OneDrive\Desktop\sadna\pyramid_project\classifier")
-    classifier = torch.load("../try/classifier18")
-    classifier.eval()
+    # classifier = torch.load("../try/classifier18")
+    # classifier.eval()
     generator = Generator()
-    #generator.load_state_dict(torch.load('./OnlyFeatures2Train/OnlyFeatures2TrainG'))
+    generator.load_state_dict(torch.load('./NoFeaturesTrain/NoFeaturesTrainG'))
     discriminator = Discriminator()
-    #discriminator.load_state_dict(torch.load('./OnlyFeatures2Train/OnlyFeatures2TrainD'))
+    discriminator.load_state_dict(torch.load('./NoFeaturesTrain/NoFeaturesTrainD'))
     if torch.cuda.device_count() > 1:
-        classifier = nn.DataParallel(classifier)
+        #classifier = nn.DataParallel(classifier)
         generator = nn.DataParallel(generator)
         discriminator = nn.DataParallel(discriminator)
-    classifier.to(device)
+    #classifier.to(device)
     generator.to(device)
     discriminator.to(device)
 
     # weights init
-    generator.init_weights()
-    discriminator.init_weights()
+    #generator.init_weights()
+    #discriminator.init_weights()
 
     # losses + optimizers
     #criterion_features = nn.L1Loss()
     criterion_bce_g = nn.BCELoss()
     criterion_bce_d = nn.BCELoss()
+    criterion_gen = nn.MSELoss()
     optimizer_generator = optim.Adam(generator.parameters(), lr=args.lr, betas=(0.5, 0.99))
     optimizer_discriminator = optim.Adam(discriminator.parameters(), lr=3*args.lr, betas=(0.5, 0.99))
 
@@ -151,19 +152,19 @@ def _main():
             # generator update
             # optimizer_generator.zero_grad()  # zeros previous grads
             generator.zero_grad()
-            _, features = classifier(images)
+            #_, features = classifier(images)
             # if images.shape[0] != noise.shape[0]:
             #     del noise
             # (torch.randn(images.shape[0], 3, 224, 224, device=device)) * std
             noise = torch.randn(images.shape[0], 256, 1, 1, device=device)
-            features_to_train = random.randint(0, len(features) - 2)
-            features = list(features)
-            masks = [features[i].clone() for i in range(len(features))]
-            setMasksPart1(masks, device, features_to_train) if train_type == 1 else setMasksPart2(masks, device, features_to_train)
+            #features_to_train = random.randint(0, len(features) - 2)
+            #features = list(features)
+            #masks = [features[i].clone() for i in range(len(features))]
+            #setMasksPart1(masks, device, features_to_train) if train_type == 1 else setMasksPart2(masks, device, features_to_train)
             # for i in range(len(features)):
             #     if i != features_to_train:
             #         features[i] = features[i]*0
-            fake_images = generator(noise, features, masks)
+            fake_images = generator(noise)
             fake_images = 0.5 * (fake_images + 1)
             fake_images = normalizer(fake_images)
 
@@ -173,21 +174,20 @@ def _main():
             discriminator_preds = discriminator(fake_images).view(-1)
             loss_adversarial = criterion_bce_g(discriminator_preds, label)
             # loss_adversarial.backward()
-            total_loss = loss_adversarial
+            total_loss = loss_adversarial + criterion_gen(fake_images, images)
             # optimizer_generator.step()  # modify weights
-            _, outputs_images_features = classifier(fake_images)
+            #_, outputs_images_features = classifier(fake_images)
             #loss_features = criterion_features(features[features_to_train], outputs_images_features[features_to_train])
             # for i in range(1, len(features) - 1):
             #     loss_features += criterion_features(features[i], outputs_images_features[i])  # calculate loss
             # loss_features += criterion_features(images, fake_images)
             # loss_features.backward()
 
-            loss_features = getLossByTrainType(features, masks, train_type, features_to_train, outputs_images_features)
-
+            #loss_features = getLossByTrainType(features, masks, train_type, features_to_train, outputs_images_features)
             if iterations % 20 == 2:
-                print('features to train: {}, features loss: {:.6f}, train type: {}'.format(features_to_train, loss_features.item(), train_type))
-            total_loss += loss_features
-            del outputs_images_features
+                print('total_loss: {:.6f}, train type: {}'.format(total_loss.item(), train_type))
+            #total_loss += loss_features
+            #del outputs_images_features
 
             total_loss.backward()
             optimizer_generator.step()  # modify weights
@@ -240,7 +240,7 @@ def _main():
                 # print('iter: {} \tfeatures Loss: {:.6f}'.format(batch_count, loss_features.item()))
                 del loss_adversarial
             del data
-            del features
+            #del features
             del images
             del fake_images
             del noise

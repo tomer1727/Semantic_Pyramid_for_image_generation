@@ -100,19 +100,19 @@ class GeneratorBlock(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
         self.conv_block1 = ConvTransposeBlock(in_channels, out_channels, 4, stride=2, padding=1)
-        # self.conv_block2 = ConvTransposeBlock(out_channels, out_channels, 3, stride=1, padding=1)
-        self.features_conv_block = ConvTransposeBlock(in_channels, out_channels, 4, stride=2, padding=1)
+        #self.conv_block2 = ConvTransposeBlock(out_channels, out_channels, 3, stride=1, padding=1)
+        #self.features_conv_block = ConvTransposeBlock(in_channels, out_channels, 4, stride=2, padding=1)
 
-    def forward(self, gen, features):
+    def forward(self, gen):
         gen = self.conv_block1(gen)
         # gen = self.conv_block2(gen)
-        features = self.features_conv_block(features)
-        return gen + features
+        #features = self.features_conv_block(features)
+        return gen #+ features
 
     def init_weights(self):
         self.conv_block1.init_weights()
-        # self.conv_block2.init_weights()
-        self.features_conv_block.init_weights()
+        #self.conv_block2.init_weights()
+        #self.features_conv_block.init_weights()
 
 
 class Generator(nn.Module):
@@ -134,17 +134,17 @@ class Generator(nn.Module):
         # self.conv2 = nn.ConvTranspose2d(3, 3, kernel_size=3, padding=1, stride=1)
         # self.conv_block2 = ConvTransposeBlock(3, 3, 3, stride=1, padding=1)
 
-    def forward(self, noise, features, masks):
+    def forward(self, noise):
         # noise has dimension 256 * 1 * 1
         x = self.conv_block1(noise)
         x = self.conv_block2(x)
-        x = self.gen_block1(x, features[4]*masks[4])
-        x = self.gen_block2(x, features[3]*masks[3])
-        x = self.gen_block3(x, features[2]*masks[2])
+        x = self.gen_block1(x)
+        x = self.gen_block2(x)
+        x = self.gen_block3(x)
         # x, _ = self.attn1(x)
-        x = self.gen_block4(x, features[1]*masks[1])
+        x = self.gen_block4(x)
         # x, _ = self.attn2(x)
-        x = self.gen_block5(x, features[0]*masks[0])
+        x = self.gen_block5(x)
         x = self.last_conv(x)
         # x = self.conv_block1(x)
         # x = self.conv2(x)
