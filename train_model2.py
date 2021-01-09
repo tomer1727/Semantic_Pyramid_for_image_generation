@@ -7,6 +7,7 @@ import torch.optim as optim
 import torch.utils.data
 import torchvision.datasets as dset
 import torchvision.transforms as transforms
+import torchvision.utils as vutils
 import torch.nn as nn
 import argparse
 import time
@@ -56,7 +57,7 @@ def _main():
                                      transforms.Resize(image_size),
                                      transforms.CenterCrop(cropped_image_size),
                                      transforms.ToTensor(),
-                                     transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+                                     # transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
                                  ]))
     print('set data loader')
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=args.batch_size, shuffle=True, num_workers=4, pin_memory=True)
@@ -88,12 +89,18 @@ def _main():
 
     num_of_epochs = args.epochs
 
-    normalizer = transforms.Compose([
+    normalizer_clf = transforms.Compose([
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ])
+    normalizer_discriminator = transforms.Compose([
+        transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
     ])
     # noise = torch.zeros(args.batch_size, 512, 1, 1, device=torch.device('cuda:0'))
     starting_time = time.time()
     iterations = 0
+    temp_results_dir = os.path.join(args.model_name, 'temp_results')
+    if not os.path.isdir(temp_results_dir):
+        os.mkdir(temp_results_dir)
     print("Starting Training Loop...")
     for epoch in range(num_of_epochs):
         for data in train_loader:
@@ -103,11 +110,12 @@ def _main():
                 starting_time = time.time()
             images, _ = data
             images = images.to(device)  # change to gpu tensor
+            images_clf = normalizer_clf(images)
 
             # generator update
             # optimizer_generator.zero_grad()  # zeros previous grads
             generator.zero_grad()
-            _, features = classifier(images)
+            _, features = classifier(images_clf)
             # if images.shape[0] != noise.shape[0]:
             #     del noise
             # (torch.randn(images.shape[0], 3, 224, 224, device=device)) * std
@@ -117,9 +125,12 @@ def _main():
             for i in range(len(features)):
                 if i != features_to_train:
                     features[i] = features[i] * 0
+            if iterations == 1:
+                fixed_features = [x.clone() for x in features]
+                fixed_noise = noise.clone()
             fake_images = generator(noise, features)
             fake_images = 0.5 * (fake_images + 1)
-            fake_images_normalized = normalizer(fake_images)
+            fake_images_normalized = normalizer_clf(fake_images)
 
             # if iterations % 4 != 2:
             # print('Generator update')
@@ -137,7 +148,7 @@ def _main():
             # loss_features.backward()
             if iterations % 20 == 2:
                 print('features to train: {}, features loss: {:.6f}'.format(features_to_train, loss_features.item()))
-            total_loss += 10 * loss_features
+            total_loss += 5 * loss_features
             del outputs_images_features
 
             total_loss.backward()
@@ -149,6 +160,7 @@ def _main():
                 # print('Discriminator update')
                 # optimizer_discriminator.zero_grad()
                 discriminator.zero_grad()
+                images = normalizer_discriminator(images)
                 # real images batch
                 label = torch.full((images.shape[0],), real_label_D, dtype=torch.float, device=device)
                 label += (torch.randn(images.shape[0], device=device)) * 0.04
@@ -195,6 +207,7 @@ def _main():
             del features
             del images
             del fake_images
+            del images_clf
             del noise
             if iterations % 3 == 1:
                 del discriminator_loss
@@ -202,6 +215,10 @@ def _main():
             if iterations % 1000 == 1:
                 torch.save(generator.state_dict(), './' + args.model_name + '/' + args.model_name + 'G')
                 torch.save(discriminator.state_dict(), './' + args.model_name + '/' + args.model_name + 'D')
+                with torch.no_grad():
+                    fake = generator(fixed_noise, fixed_features).detach().cpu()
+                grid = vutils.make_grid(fake, padding=2, normalize=True)
+                vutils.save_image(grid, os.path.join(temp_results_dir, 'res_iter_{}.jpg'.format(iterations // 1000)))
             if iterations % 15000 == 1:
                 torch.save(generator.state_dict(), './' + args.model_name + '/' + args.model_name + 'G_' + str(iterations // 15000))
                 torch.save(discriminator.state_dict(), './' + args.model_name + '/' + args.model_name + 'D_' + str(iterations // 15000))
