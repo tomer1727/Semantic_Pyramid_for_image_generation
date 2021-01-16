@@ -191,15 +191,12 @@ def _main():
                     if iterations % 30 == 1:
                         print('{}: {:.6f}'.format(k, v))
 
-            # sample images from the fixed noise
-            if iterations % 500 == 1:
-                fake_images = sample(generator, z)
-                grid = vutils.make_grid(fake_images, padding=2, normalize=True, nrow=10)
-                vutils.save_image(grid, os.path.join(temp_results_dir, 'res_iter_{}.jpg'.format(iterations // 500)))
-
             if iterations % 1000 == 1:
                 torch.save(generator.state_dict(),  models_dir + '/' + args.model_name + 'G')
                 torch.save(discriminator.state_dict(), models_dir + '/' + args.model_name + 'D')
+                fake_images = sample(generator, z)
+                grid = vutils.make_grid(fake_images, padding=2, normalize=True, nrow=10)
+                vutils.save_image(grid, os.path.join(temp_results_dir, 'res_iter_{}.jpg'.format(iterations // 500)))
 
             if iterations % 15000 == 1:
                 torch.save(generator.state_dict(), models_dir + '/' + args.model_name + 'G_' + str(iterations // 15000))

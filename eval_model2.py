@@ -1,18 +1,13 @@
 import torch
-from torch.autograd import Variable
 from PIL import Image
 import os
 import torch.nn.parallel
-import torch.optim as optim
 import torch.utils.data
 import torchvision.datasets as dset
 import torchvision.transforms as transforms
 from torchvision.utils import save_image
 import torch.nn as nn
 import argparse
-import numpy as np
-import matplotlib.pyplot as plt
-import scipy.misc
 
 from classifier import Classifier
 from generator2 import Generator
@@ -34,98 +29,31 @@ class ImageFolderWithPaths(dset.ImageFolder):
         return tuple_with_path
 
 
-def print_images_with_output(image, output, model_name):
-    """
-    Show @param image, output side by side, used to show input image with its output
-    """
-    image = np.transpose(image, (1, 2, 0))
-    output = np.transpose(output, (1, 2, 0))
-    plt.figure(figsize=(8, 8))
-    plt.subplot(121)
-    plt.imshow(image)
-    plt.axis('off')
-    plt.subplot(122)
-    plt.imshow(output)
-    plt.axis('off')
-    plt.suptitle(model_name)
-    plt.show()
-
-
 def _main():
     device = torch.device("cuda:0" if (torch.cuda.is_available()) else "cpu")
-    # train_root = r"C:\Users\tomer\OneDrive\Desktop\u"
-    # train_root = '/home/dcor/datasets/smallPlaces'
-    train_root = '/home/dcor/ronmokady/workshop21/team1/u'
 
-    image_size = 256
-    cropped_image_size = 224
-    print("set image folder")
-    train_set = ImageFolderWithPaths(root=train_root,
-                                 transform=transforms.Compose([
-                                     transforms.Resize(image_size),
-                                     transforms.CenterCrop(cropped_image_size),
-                                     transforms.ToTensor(),
-                                     transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-                                 ]))
-    print('set data loader')
-    train_loader = torch.utils.data.DataLoader(train_set, batch_size=1, shuffle=True)
-
-    loader = transforms.Compose([
-        transforms.Resize(image_size),
-        transforms.CenterCrop(cropped_image_size)])
-
-    # classifier = torch.load(r"C:\Users\tomer\OneDrive\Desktop\sadna\pyramid_project\classifier")
-    classifier = torch.load('./classifier18')
-    classifier.eval()
     generator = Generator()
-    if args.full_model_name is not None:
-        generator.load_state_dict(torch.load('./' + args.full_model_name))
-    else:
-        generator.load_state_dict(torch.load('./' + args.model_name + '/' + args.model_name + 'G_' + args.epochs))
-    # generator.load_state_dict(torch.load('./tanh16/tanh16_200'))
+    generator.load_state_dict(torch.load(args.full_model_name))
 
     generator.eval()
-    classifier.to(device)
     generator.to(device)
 
-    # noise = torch.zeros(1, 256, 1, 1, device=torch.device('cuda:0'))
-
     print("Starting Eval Loop...")
-    train_loss = 0.0  # monitor training loss
-    i = 0
-    for data in train_loader:
-        images, _, paths = data
-        images = images.cuda()  # change to gpu tensor
-        _, features = classifier(images)
-        noise = torch.randn(images.shape[0], 256, 1, 1, device=device)
-        generator.eval()
-        outputs_images = generator(noise, features)  # forward pass
-        outputs_images = 0.5 * (outputs_images + 1)
-        image_to_show = outputs_images[0]
-        in_image = Image.open(paths[0])
-        in_image = loader(in_image)
-        dir_name = args.full_model_name.split('/')[0]
-        output_images_dir = os.path.join(dir_name, 'output_images_' + args.full_model_name.split('/')[1])
-        if not os.path.isdir(output_images_dir):
-            os.mkdir(output_images_dir)
-        in_image.save(os.path.join(output_images_dir, 'in{}.jpg'.format(i)))
-        save_image(image_to_show.detach().cpu(), os.path.join(output_images_dir, 'out_full_features_num_{}.jpg'.format(i)))
-        for features_layer in range(len(features)-1):
-            one_level_features = [torch.zeros(features[x].shape, device=device) for x in range(len(features)-1)]
-            one_level_features[features_layer] = features[features_layer]
-            outputs_images = generator(noise, one_level_features)  # forward pass
+    output_images_dir = os.path.join(args.output, args.full_model_name.split('/')[-1])
+    if not os.path.isdir(output_images_dir):
+        os.makedirs(output_images_dir, exist_ok=True)
+    for j in range(15):
+        z = torch.randn(1, 128, 1, 1, device=device)
+        with torch.no_grad():
+            generator.eval()
+            outputs_images = generator(z)
             outputs_images = 0.5 * (outputs_images + 1)
-            image_to_show = outputs_images[0]
-            save_image(image_to_show.detach().cpu(), os.path.join(output_images_dir, 'out_features_layer_{}_num_{}.jpg'.format(features_layer, i)))
-        i += 1
-        if i == 10:
-            return
+            save_image(outputs_images[0].detach().cpu(), os.path.join(output_images_dir, 'out_{}.jpg'.format(j)))
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('choose hyperparameters')
-    parser.add_argument('--epochs', default='200')
-    parser.add_argument('--model-name', default='firstTry')
-    parser.add_argument('--full-model-name')
+    parser.add_argument('--full-model-name', required=True)
+    parser.add_argument('--output', required=True)
     args = parser.parse_args()
     _main()
