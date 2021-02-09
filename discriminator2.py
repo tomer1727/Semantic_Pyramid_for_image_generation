@@ -5,12 +5,12 @@ import functools
 def init_weights(m):
     classname = m.__class__.__name__
     if classname.find('Conv') != -1:
-        nn.init.normal_(m.weight.data, 0.0, 0.2)
+        nn.init.normal_(m.weight.data, 0.0, 0.02)
     elif classname.find('BatchNorm') != -1:
-        nn.init.normal_(m.weight.data, 1.0, 0.2)
+        nn.init.normal_(m.weight.data, 1.0, 0.02)
         nn.init.constant_(m.bias.data, 0)
     elif classname.find('Linear') != -1:
-        nn.init.normal_(m.weight.data, 0.0, 0.2)
+        nn.init.normal_(m.weight.data, 0.0, 0.02)
 
 
 def get_norm_layer(norm):
@@ -49,17 +49,19 @@ class ConvBlock(nn.Module):
 class Discriminator(nn.Module):
     def __init__(self, norm):
         super().__init__()
-        # 128x128 -> 64x64
+        # 256x256 -> 128x128
         self.first_conv = nn.Conv2d(3, 64, kernel_size=4, stride=2, padding=1)
         self.leaky_relu = nn.LeakyReLU(0.2, True)
-        # 64x64 -> 32x32
+        # 128x128 -> 64x64
         self.conv_block1 = ConvBlock(64, 64, 4, stride=2, padding=1, norm=norm)
-        # 32x32 -> 16x16
+        # 64x64 -> 32x32
         self.conv_block2 = ConvBlock(64, 128, 4, stride=2, padding=1, norm=norm)
-        # 16x16 -> 8x8
+        # 32x32 -> 16x16
         self.conv_block3 = ConvBlock(128, 256, 4, stride=2, padding=1, norm=norm)
-        # 8x8 -> 4x4
+        # 16x16 -> 8x8
         self.conv_block4 = ConvBlock(256, 512, 4, stride=2, padding=1, norm=norm)
+        # 8x8 -> 4x4
+        self.conv_block5 = ConvBlock(512, 512, 4, stride=2, padding=1, norm=norm)
         # 4x4 -> 1x1
         self.last_conv = nn.Conv2d(512, 1, 4, stride=1, padding=0)
 
@@ -70,6 +72,7 @@ class Discriminator(nn.Module):
         x = self.conv_block2(x)
         x = self.conv_block3(x)
         x = self.conv_block4(x)
+        x = self.conv_block5(x)
         x = self.last_conv(x)
         return x
 
@@ -79,4 +82,5 @@ class Discriminator(nn.Module):
         self.conv_block2.init_weights()
         self.conv_block3.init_weights()
         self.conv_block4.init_weights()
+        self.conv_block5.init_weights()
         self.last_conv.apply(init_weights)

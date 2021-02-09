@@ -4,12 +4,12 @@ import torch.nn as nn
 def init_weights(m):
     classname = m.__class__.__name__
     if classname.find('Conv') != -1:
-        nn.init.normal_(m.weight.data, 0.0, 0.2)
+        nn.init.normal_(m.weight.data, 0.0, 0.02)
     elif classname.find('BatchNorm') != -1:
-        nn.init.normal_(m.weight.data, 1.0, 0.2)
+        nn.init.normal_(m.weight.data, 1.0, 0.02)
         nn.init.constant_(m.bias.data, 0)
     elif classname.find('Linear') != -1:
-        nn.init.normal_(m.weight.data, 0.0, 0.2)
+        nn.init.normal_(m.weight.data, 0.0, 0.02)
 
 
 class ConvTransposeBlock(nn.Module):
@@ -37,14 +37,16 @@ class Generator(nn.Module):
         # 1x1 -> 4x4
         self.conv_block1 = ConvTransposeBlock(128, 512, 4, stride=1, padding=0)
         # 4x4 -> 8x8
-        self.conv_block2 = ConvTransposeBlock(512, 256, 4, stride=2, padding=1)
+        self.conv_block2 = ConvTransposeBlock(512, 512, 4, stride=2, padding=1)
         # 8x8 -> 16x16
-        self.conv_block3 = ConvTransposeBlock(256, 128, 4, stride=2, padding=1)
+        self.conv_block3 = ConvTransposeBlock(512, 256, 4, stride=2, padding=1)
         # 16x16 -> 32x32
-        self.conv_block4 = ConvTransposeBlock(128, 64, 4, stride=2, padding=1)
+        self.conv_block4 = ConvTransposeBlock(256, 128, 4, stride=2, padding=1)
         # 32x32 -> 64x64
-        self.conv_block5 = ConvTransposeBlock(64, 64, 4, stride=2, padding=1)
+        self.conv_block5 = ConvTransposeBlock(128, 64, 4, stride=2, padding=1)
         # 64x64 -> 128x128
+        self.conv_block6 = ConvTransposeBlock(64, 64, 4, stride=2, padding=1)
+        # 128x128 -> 256x256
         self.last_conv = nn.ConvTranspose2d(64, 3, kernel_size=4, stride=2, padding=1)
         self.tanh = nn.Tanh()
 
@@ -55,6 +57,7 @@ class Generator(nn.Module):
         x = self.conv_block3(x)
         x = self.conv_block4(x)
         x = self.conv_block5(x)
+        x = self.conv_block6(x)
         x = self.last_conv(x)
         x = self.tanh(x)
         return x
@@ -65,6 +68,7 @@ class Generator(nn.Module):
         self.conv_block3.init_weights()
         self.conv_block4.init_weights()
         self.conv_block5.init_weights()
+        self.conv_block6.init_weights()
         self.last_conv.apply(init_weights)
 
 

@@ -125,8 +125,8 @@ def _main():
     device = torch.device("cuda:0" if (torch.cuda.is_available()) else "cpu")
     train_root = args.train_path
 
-    image_size = 128
-    cropped_image_size = 128
+    image_size = 256
+    cropped_image_size = 256
     print("set image folder")
     train_set = dset.ImageFolder(root=train_root,
                                  transform=transforms.Compose([
@@ -218,10 +218,11 @@ if __name__ == '__main__':
     if args.model_name is None:
         print("Must specify model name")
         exit(1)
-    if not os.path.exists('./' + args.model_name):
-        os.mkdir('./' + args.model_name)
+    out_dir = './wgan-gp_models/' + args.model_name
+    if not os.path.exists(out_dir):
+        os.mkdir(out_dir)
     arg_dic = vars(args)
-    with open('./' + args.model_name + '/hyperparams.txt', 'w') as file:
+    with open(out_dir + '/hyperparams.txt', 'w') as file:
         for key in arg_dic:
             file.write(key + ': {}\n'.format(arg_dic[key]))
 
