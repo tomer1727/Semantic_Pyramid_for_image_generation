@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 import os
 import torch.nn.parallel
 import torch.optim as optim
@@ -71,7 +72,7 @@ def gradient_penalty(f, real, fake):
     return gp
 
 
-def train_generator(generator, discriminator, generator_loss_fn, generator_optimizer, batch_size):
+def train_generator(generator, discriminator, generator_loss_fn, generator_optimizer, batch_size, features, criterion_features, classifier, normalizer_clf):
     device = torch.device("cuda:0" if (torch.cuda.is_available()) else "cpu")
 
     generator.train()
@@ -79,25 +80,35 @@ def train_generator(generator, discriminator, generator_loss_fn, generator_optim
 
     z = torch.randn(batch_size, 128, 1, 1, device=device)
 
-    fake_images = generator(z)
+    fake_images = generator(z, features)
     fake_images_d_logit = discriminator(fake_images)
     generator_loss = generator_loss_fn(fake_images_d_logit)
 
+    fake_images_clf = normalizer_clf(fake_images)
+    _, fake_features = classifier(fake_images_clf)
+    for i in range(1, 5):
+        normalize_factor = features[i].shape[1] * features[i].shape[2]*features[i].shape[3]
+        if i == 1:
+            content_loss = (1/normalize_factor) * criterion_features(features[i], fake_features[i])
+        else:
+            content_loss += (1/normalize_factor) * criterion_features(features[i], fake_features[i])
+
+    total_loss = generator_loss + content_loss
     generator.zero_grad()
-    generator_loss.backward()
+    total_loss.backward()
     generator_optimizer.step()
 
-    return {'g_loss': generator_loss}
+    return {'g_loss': generator_loss, 'content_loss': content_loss, 'total_loss': total_loss}
 
 
-def train_discriminator(generator, discriminator, discriminator_loss_fn, discriminator_optimizer, real_images):
+def train_discriminator(generator, discriminator, discriminator_loss_fn, discriminator_optimizer, real_images, features):
     device = torch.device("cuda:0" if (torch.cuda.is_available()) else "cpu")
 
     generator.train()
     discriminator.train()
 
     z = torch.randn(real_images.shape[0], 128, 1, 1).to(device)
-    fake_images = generator(z).detach()
+    fake_images = generator(z, features).detach()
 
     real_images_d_logit = discriminator(real_images)
     fake_images_d_logit = discriminator(fake_images)
@@ -114,10 +125,10 @@ def train_discriminator(generator, discriminator, discriminator_loss_fn, discrim
     return {'d_loss': real_images_d_loss + fake_images_d_loss, 'gp': gp}
 
 
-def sample(generator, z):
+def sample(generator, z, features):
     with torch.no_grad():
         generator.eval()
-        return generator(z)
+        return generator(z, features)
 
 
 def _main():
@@ -132,16 +143,25 @@ def _main():
                                  transform=transforms.Compose([
                                      transforms.Resize(image_size),
                                      transforms.CenterCrop(cropped_image_size),
-                                     transforms.ToTensor(),
-                                     transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
+                                     transforms.ToTensor()
                                  ]))
+
+    normalizer_clf = transforms.Compose([
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ])
+    normalizer_discriminator = transforms.Compose([
+        transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
+    ])
     print('set data loader')
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=args.batch_size, shuffle=True, num_workers=4, pin_memory=True, drop_last=True)
 
+    classifier = torch.load("./classifier18")
+    classifier.eval()
     generator = Generator()
     discriminator = Discriminator(args.discriminator_norm)
     # generator.load_state_dict(torch.load('./expc/expcG'))
     # discriminator.load_state_dict(torch.load('./expc/expcD'))
+    classifier.to(device)
     generator.to(device)
     discriminator.to(device)
 
@@ -151,6 +171,7 @@ def _main():
 
     # losses + optimizers
     criterion_discriminator, criterion_generator = get_wgan_losses_fn()
+    criterion_features = nn.MSELoss()
     generator_optimizer = optim.Adam(generator.parameters(), lr=args.lr, betas=(0.5, 0.999))
     discriminator_optimizer = optim.Adam(discriminator.parameters(), lr=args.lr, betas=(0.5, 0.999))
 
@@ -168,7 +189,9 @@ def _main():
     if not os.path.isdir(models_dir):
         os.mkdir(models_dir)
     writer = tensorboardX.SummaryWriter(os.path.join(outputs_dir, 'summaries'))
-    z = torch.randn(100, 128, 1, 1).to(device)  # a fixed noise for sampling
+    z = torch.randn(args.batch_size, 128, 1, 1).to(device)  # a fixed noise for sampling
+    fixed_features = 0
+    first_iter = True
     print("Starting Training Loop...")
     for epoch in range(num_of_epochs):
         for data in train_loader:
@@ -178,14 +201,22 @@ def _main():
                 starting_time = time.time()
             images, _ = data
             images = images.to(device)  # change to gpu tensor
+            images_discriminator = normalizer_discriminator(images)
+            images_clf = normalizer_clf(images)
+            _, features = classifier(images_clf)
+            if first_iter:
+                first_iter = False
+                fixed_features = tuple([torch.clone(features[x]) for x in range(len(features))])
+                grid = vutils.make_grid(images_discriminator, padding=2, normalize=True, nrow=8)
+                vutils.save_image(grid, os.path.join(temp_results_dir, 'original_images.jpg'))
 
-            discriminator_loss_dict = train_discriminator(generator, discriminator, criterion_discriminator, discriminator_optimizer, images)
+            discriminator_loss_dict = train_discriminator(generator, discriminator, criterion_discriminator, discriminator_optimizer, images_discriminator, features)
             for k, v in discriminator_loss_dict.items():
                 writer.add_scalar('D/%s' % k, v.data.cpu().numpy(), global_step=iterations)
                 if iterations % 30 == 1:
                     print('{}: {:.6f}'.format(k, v))
             if iterations % args.discriminator_steps == 1:
-                generator_loss_dict = train_generator(generator, discriminator, criterion_generator, generator_optimizer, images.shape[0])
+                generator_loss_dict = train_generator(generator, discriminator, criterion_generator, generator_optimizer, images.shape[0], features, criterion_features, classifier, normalizer_clf)
                 for k, v in generator_loss_dict.items():
                     writer.add_scalar('G/%s' % k, v.data.cpu().numpy(), global_step=iterations//5 + 1)
                     if iterations % 30 == 1:
@@ -194,9 +225,9 @@ def _main():
             if iterations % 1000 == 1:
                 torch.save(generator.state_dict(),  models_dir + '/' + args.model_name + 'G')
                 torch.save(discriminator.state_dict(), models_dir + '/' + args.model_name + 'D')
-                fake_images = sample(generator, z)
-                grid = vutils.make_grid(fake_images, padding=2, normalize=True, nrow=10)
-                vutils.save_image(grid, os.path.join(temp_results_dir, 'res_iter_{}.jpg'.format(iterations // 500)))
+                fake_images = sample(generator, z, fixed_features)
+                grid = vutils.make_grid(fake_images, padding=2, normalize=True, nrow=8)
+                vutils.save_image(grid, os.path.join(temp_results_dir, 'res_iter_{}.jpg'.format(iterations // 1000)))
 
             if iterations % 15000 == 1:
                 torch.save(generator.state_dict(), models_dir + '/' + args.model_name + 'G_' + str(iterations // 15000))
