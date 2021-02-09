@@ -31,6 +31,22 @@ class ConvTransposeBlock(nn.Module):
         self.block.apply(init_weights)
 
 
+class GeneratorBlock(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super().__init__()
+        self.conv_block1 = ConvTransposeBlock(in_channels, out_channels, 4, stride=2, padding=1)
+        self.features_conv_block = ConvTransposeBlock(in_channels, out_channels, 4, stride=2, padding=1)
+
+    def forward(self, gen, features):
+        gen = self.conv_block1(gen)
+        features = self.features_conv_block(features)
+        return gen + features
+
+    def init_weights(self):
+        self.conv_block1.init_weights()
+        self.features_conv_block.init_weights()
+
+
 class Generator(nn.Module):
     def __init__(self):
         super().__init__()
@@ -39,25 +55,25 @@ class Generator(nn.Module):
         # 4x4 -> 8x8
         self.conv_block2 = ConvTransposeBlock(512, 512, 4, stride=2, padding=1)
         # 8x8 -> 16x16
-        self.conv_block3 = ConvTransposeBlock(512, 256, 4, stride=2, padding=1)
+        self.conv_block3 = GeneratorBlock(512, 256)
         # 16x16 -> 32x32
-        self.conv_block4 = ConvTransposeBlock(256, 128, 4, stride=2, padding=1)
+        self.conv_block4 = GeneratorBlock(256, 128)
         # 32x32 -> 64x64
-        self.conv_block5 = ConvTransposeBlock(128, 64, 4, stride=2, padding=1)
+        self.conv_block5 = GeneratorBlock(128, 64)
         # 64x64 -> 128x128
-        self.conv_block6 = ConvTransposeBlock(64, 64, 4, stride=2, padding=1)
+        self.conv_block6 = GeneratorBlock(64, 64)
         # 128x128 -> 256x256
         self.last_conv = nn.ConvTranspose2d(64, 3, kernel_size=4, stride=2, padding=1)
         self.tanh = nn.Tanh()
 
-    def forward(self, noise):
+    def forward(self, noise, features):
         # noise has dimension 128 * 1 * 1
         x = self.conv_block1(noise)
         x = self.conv_block2(x)
-        x = self.conv_block3(x)
-        x = self.conv_block4(x)
-        x = self.conv_block5(x)
-        x = self.conv_block6(x)
+        x = self.conv_block3(x, features[4])
+        x = self.conv_block4(x, features[3])
+        x = self.conv_block5(x, features[2])
+        x = self.conv_block6(x, features[1])
         x = self.last_conv(x)
         x = self.tanh(x)
         return x
