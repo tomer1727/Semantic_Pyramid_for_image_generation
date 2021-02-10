@@ -86,9 +86,11 @@ def train_generator(generator, discriminator, generator_loss_fn, generator_optim
 
     fake_images_clf = normalizer_clf(fake_images)
     _, fake_features = classifier(fake_images_clf)
-    for i in range(1, 5):
+    need_init = True
+    for i in range(3, 4):
         normalize_factor = features[i].shape[1] * features[i].shape[2]*features[i].shape[3]
-        if i == 1:
+        if need_init:
+            need_init = False
             content_loss = (1/normalize_factor) * criterion_features(features[i], fake_features[i])
         else:
             content_loss += (1/normalize_factor) * criterion_features(features[i], fake_features[i])
@@ -204,6 +206,11 @@ def _main():
             images_discriminator = normalizer_discriminator(images)
             images_clf = normalizer_clf(images)
             _, features = classifier(images_clf)
+            features_to_train = 3
+            features = list(features)
+            for i in range(len(features)):
+                if i != features_to_train:
+                    features[i] = features[i] * 0
             if first_iter:
                 first_iter = False
                 fixed_features = tuple([torch.clone(features[x]) for x in range(len(features))])
