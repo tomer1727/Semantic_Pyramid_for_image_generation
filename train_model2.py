@@ -12,6 +12,7 @@ import tensorboardX
 import functools
 import numpy as np
 import torchvision.utils as vutils
+import random
 
 from classifier import Classifier
 from generator2 import Generator
@@ -130,6 +131,12 @@ def sample(generator, z, features):
         generator.eval()
         return generator(z, features)
 
+def isolate_layer(fixed_features, selected_layer, device):
+    res = [torch.clone(fixed_features[x]) for x in range(len(fixed_features))]
+    for i in range(len(fixed_features)):
+        if i != selected_layer:
+            res[i] = torch.zeros(res[i].shape, device=device)
+    return res
 
 def _main():
     print_gpu_details()
@@ -155,7 +162,7 @@ def _main():
     print('set data loader')
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=args.batch_size, shuffle=True, num_workers=4, pin_memory=True, drop_last=True)
 
-    classifier = torch.load("./classifier18")
+    classifier = torch.load("/home/dcor/ronmokady/workshop21/team1/try/classifier18")
     classifier.eval()
     generator = Generator()
     discriminator = Discriminator(args.discriminator_norm)
@@ -204,11 +211,20 @@ def _main():
             images_discriminator = normalizer_discriminator(images)
             images_clf = normalizer_clf(images)
             _, features = classifier(images_clf)
+
+
             if first_iter:
                 first_iter = False
                 fixed_features = tuple([torch.clone(features[x]) for x in range(len(features))])
                 grid = vutils.make_grid(images_discriminator, padding=2, normalize=True, nrow=8)
                 vutils.save_image(grid, os.path.join(temp_results_dir, 'original_images.jpg'))
+
+            # Select a features layer to train on
+            features_to_train = random.randint(1, len(features) - 2)
+            features = list(features)
+            for i in range(len(features)):
+                if i != features_to_train:
+                    features[i] = torch.zeros(features[i].shape, device=device)
 
             discriminator_loss_dict = train_discriminator(generator, discriminator, criterion_discriminator, discriminator_optimizer, images_discriminator, features)
             for k, v in discriminator_loss_dict.items():
@@ -225,9 +241,11 @@ def _main():
             if iterations % 1000 == 1:
                 torch.save(generator.state_dict(),  models_dir + '/' + args.model_name + 'G')
                 torch.save(discriminator.state_dict(), models_dir + '/' + args.model_name + 'D')
-                fake_images = sample(generator, z, fixed_features)
-                grid = vutils.make_grid(fake_images, padding=2, normalize=True, nrow=8)
-                vutils.save_image(grid, os.path.join(temp_results_dir, 'res_iter_{}.jpg'.format(iterations // 1000)))
+                for i in range(1,len(fixed_features)-1):
+                    one_feature = isolate_layer(fixed_features, i, device)
+                    fake_images = sample(generator, z, one_feature)
+                    grid = vutils.make_grid(fake_images, padding=2, normalize=True, nrow=8)
+                    vutils.save_image(grid, os.path.join(temp_results_dir, 'res_iter_{}_layer_{}.jpg'.format(iterations // 1000, i)))
 
             if iterations % 15000 == 1:
                 torch.save(generator.state_dict(), models_dir + '/' + args.model_name + 'G_' + str(iterations // 15000))
