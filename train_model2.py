@@ -13,6 +13,7 @@ import functools
 import numpy as np
 import torchvision.utils as vutils
 import random
+import math
 
 from classifier import Classifier
 from generator2 import Generator
@@ -73,7 +74,7 @@ def gradient_penalty(f, real, fake):
     return gp
 
 
-def train_generator(generator, discriminator, generator_loss_fn, generator_optimizer, batch_size, features, criterion_features, classifier, normalizer_clf):
+def train_generator(generator, discriminator, generator_loss_fn, generator_optimizer, batch_size, features, classifier, normalizer_clf, masks, train_type, features_to_train):
     device = torch.device("cuda:0" if (torch.cuda.is_available()) else "cpu")
 
     generator.train()
@@ -81,35 +82,30 @@ def train_generator(generator, discriminator, generator_loss_fn, generator_optim
 
     z = torch.randn(batch_size, 128, 1, 1, device=device)
 
-    fake_images = generator(z, features)
+    fake_images = generator(z, features, masks)
     fake_images_d_logit = discriminator(fake_images)
     generator_loss = generator_loss_fn(fake_images_d_logit)
 
     fake_images_clf = normalizer_clf(fake_images)
     _, fake_features = classifier(fake_images_clf)
-    for i in range(1, 5):
-        normalize_factor = features[i].shape[1] * features[i].shape[2]*features[i].shape[3]
-        if i == 1:
-            content_loss = (1/normalize_factor) * criterion_features(features[i], fake_features[i])
-        else:
-            content_loss += (1/normalize_factor) * criterion_features(features[i], fake_features[i])
 
-    total_loss = generator_loss + content_loss
+    features_loss = getLossByTrainType(features, masks, train_type, features_to_train, fake_features)
+    total_loss = generator_loss + features_loss
     generator.zero_grad()
     total_loss.backward()
     generator_optimizer.step()
 
-    return {'g_loss': generator_loss, 'content_loss': content_loss, 'total_loss': total_loss}
+    return {'g_loss': generator_loss, 'features_loss': features_loss, 'total_loss': total_loss}
 
 
-def train_discriminator(generator, discriminator, discriminator_loss_fn, discriminator_optimizer, real_images, features):
+def train_discriminator(generator, discriminator, discriminator_loss_fn, discriminator_optimizer, real_images, features, masks):
     device = torch.device("cuda:0" if (torch.cuda.is_available()) else "cpu")
 
     generator.train()
     discriminator.train()
 
     z = torch.randn(real_images.shape[0], 128, 1, 1).to(device)
-    fake_images = generator(z, features).detach()
+    fake_images = generator(z, features, masks).detach()
 
     real_images_d_logit = discriminator(real_images)
     fake_images_d_logit = discriminator(fake_images)
@@ -125,11 +121,10 @@ def train_discriminator(generator, discriminator, discriminator_loss_fn, discrim
 
     return {'d_loss': real_images_d_loss + fake_images_d_loss, 'gp': gp}
 
-
-def sample(generator, z, features):
+def sample(generator, z, features, masks):
     with torch.no_grad():
         generator.eval()
-        return generator(z, features)
+        return generator(z, features, masks)
 
 def isolate_layer(fixed_features, selected_layer, device):
     res = [torch.clone(fixed_features[x]) for x in range(len(fixed_features))]
@@ -137,6 +132,45 @@ def isolate_layer(fixed_features, selected_layer, device):
         if i != selected_layer:
             res[i] = torch.zeros(res[i].shape, device=device)
     return res
+
+def setCroppedMask(random_crop, mask, window_len=0.45):
+    x_start = math.floor((random_crop[0]/100) * mask.shape[2])
+    y_start = math.floor((random_crop[1]/100) * mask.shape[3])
+    x_end = x_start +  math.floor(window_len * mask.shape[2])
+    y_end = y_start + math.floor(window_len * mask.shape[3])
+    #print('setCroppedMask- X:({},{}) Y:({},{})'.format(x_start,x_end,y_start,y_end))
+    mask[:,:, x_start:x_end, y_start:y_end] = 1
+    return mask
+
+def setMasksPart1(masks, device, random_layer_idx):
+    for idx,mask in enumerate(masks):
+        if idx == random_layer_idx:
+            # Pass the whole feature layer
+            masks[idx] = torch.ones(mask.shape, device=device)
+        else:
+            # Block the feature layer
+            masks[idx] = mask*0
+
+def setMasksPart2(masks, device, random_layer_idx):
+    random_crop = (random.randint(0, 50), random.randint(0, 50)) # randomize the percentage of mask indexes
+    masks[random_layer_idx] = torch.ones(masks[random_layer_idx].shape, device=device)
+    for idx,mask in enumerate(masks):
+        if idx < random_layer_idx:
+            # Pass a part of the feature layer
+            masks[idx] = setCroppedMask(random_crop, torch.zeros(mask.shape, device=device))
+        else:
+            # Block the feature layer
+            masks[idx] = mask*0
+
+def getLossByTrainType(features, masks, train_type, features_to_train, outputs_images_features):
+    criterion_features = nn.MSELoss()
+    if train_type == 1:
+        loss_features = criterion_features(features[features_to_train], outputs_images_features[features_to_train])
+    else:
+        loss_features = criterion_features(features[0]*masks[0], outputs_images_features[0]*masks[0])
+        for i in range(1, features_to_train + 1):
+            loss_features += criterion_features(features[i]*masks[i], outputs_images_features[i]*masks[i])  # calculate loss
+    return loss_features
 
 def _main():
     print_gpu_details()
@@ -178,7 +212,7 @@ def _main():
 
     # losses + optimizers
     criterion_discriminator, criterion_generator = get_wgan_losses_fn()
-    criterion_features = nn.MSELoss()
+    #criterion_features = nn.MSELoss()
     generator_optimizer = optim.Adam(generator.parameters(), lr=args.lr, betas=(0.5, 0.999))
     discriminator_optimizer = optim.Adam(discriminator.parameters(), lr=args.lr, betas=(0.5, 0.999))
 
@@ -202,6 +236,8 @@ def _main():
     print("Starting Training Loop...")
     for epoch in range(num_of_epochs):
         for data in train_loader:
+            train_type = random.choices([1,2], [args.train1_prob, 1-args.train1_prob])
+
             iterations += 1
             if iterations % 30 == 1:
                 print('epoch:', epoch, ', iter', iterations, 'start, time =', time.time() - starting_time, 'seconds')
@@ -216,36 +252,45 @@ def _main():
             if first_iter:
                 first_iter = False
                 fixed_features = tuple([torch.clone(features[x]) for x in range(len(features))])
+                fixed_masks = [torch.ones(features[x].shape, device=device) for x in range(len(features))]
                 grid = vutils.make_grid(images_discriminator, padding=2, normalize=True, nrow=8)
                 vutils.save_image(grid, os.path.join(temp_results_dir, 'original_images.jpg'))
 
             # Select a features layer to train on
             features_to_train = random.randint(1, len(features) - 2)
             features = list(features)
-            for i in range(len(features)):
-                if i != features_to_train:
-                    features[i] = torch.zeros(features[i].shape, device=device)
+            masks = [features[i].clone() for i in range(len(features))]
+            setMasksPart1(masks, device, features_to_train) if train_type == 1 else setMasksPart2(masks, device,
+                                                                                                  features_to_train)
+            #for i in range(len(features)):
+            #    if i != features_to_train:
+            #        features[i] = torch.zeros(features[i].shape, device=device)
 
-            discriminator_loss_dict = train_discriminator(generator, discriminator, criterion_discriminator, discriminator_optimizer, images_discriminator, features)
+            discriminator_loss_dict = train_discriminator(generator, discriminator, criterion_discriminator, discriminator_optimizer, images_discriminator, features, masks)
             for k, v in discriminator_loss_dict.items():
                 writer.add_scalar('D/%s' % k, v.data.cpu().numpy(), global_step=iterations)
                 if iterations % 30 == 1:
                     print('{}: {:.6f}'.format(k, v))
             if iterations % args.discriminator_steps == 1:
-                generator_loss_dict = train_generator(generator, discriminator, criterion_generator, generator_optimizer, images.shape[0], features, criterion_features, classifier, normalizer_clf)
+                generator_loss_dict = train_generator(generator, discriminator, criterion_generator, generator_optimizer, images.shape[0], features, classifier, normalizer_clf, masks, train_type, features_to_train)
                 for k, v in generator_loss_dict.items():
                     writer.add_scalar('G/%s' % k, v.data.cpu().numpy(), global_step=iterations//5 + 1)
                     if iterations % 30 == 1:
                         print('{}: {:.6f}'.format(k, v))
 
-            if iterations % 1000 == 1:
+            if iterations % 2000 == 1:
                 torch.save(generator.state_dict(),  models_dir + '/' + args.model_name + 'G')
                 torch.save(discriminator.state_dict(), models_dir + '/' + args.model_name + 'D')
                 for i in range(1,len(fixed_features)-1):
                     one_feature = isolate_layer(fixed_features, i, device)
-                    fake_images = sample(generator, z, one_feature)
+                    fake_images = sample(generator, z, one_feature, fixed_masks)
                     grid = vutils.make_grid(fake_images, padding=2, normalize=True, nrow=8)
-                    vutils.save_image(grid, os.path.join(temp_results_dir, 'res_iter_{}_layer_{}.jpg'.format(iterations // 1000, i)))
+                    vutils.save_image(grid, os.path.join(temp_results_dir, 'res_iter_{}_layer_{}.jpg'.format(iterations // 2000, i)))
+                one_feature = isolate_layer(fixed_features, -1, device)
+                fake_images = sample(generator, z, one_feature, fixed_masks)
+                grid = vutils.make_grid(fake_images, padding=2, normalize=True, nrow=8)
+                vutils.save_image(grid, os.path.join(temp_results_dir,
+                                                     'res_iter_{}_NO_layers.jpg'.format(iterations // 2000)))
 
             if iterations % 15000 == 1:
                 torch.save(generator.state_dict(), models_dir + '/' + args.model_name + 'G_' + str(iterations // 15000))
@@ -262,6 +307,7 @@ if __name__ == '__main__':
     parser.add_argument('--gradient-penalty-weight', type=float, default=10.0)
     parser.add_argument('--discriminator-steps', type=int, default=5)
     parser.add_argument('--train-path', default='/home/dcor/datasets/places365')
+    parser.add_argument('--train1-prob', default=0.7, type=float)
     args = parser.parse_args()
     print(args)
     if args.model_name is None:
