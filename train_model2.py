@@ -8,6 +8,7 @@ import torchvision.datasets as dset
 import torchvision.transforms as transforms
 import argparse
 import time
+import random
 import tensorboardX # run command on terminal: tensorboard --logdir=<your_log_dir>
 import functools
 import numpy as np
@@ -72,8 +73,8 @@ def gradient_penalty(f, real, fake):
     return gp
 
 
-def train_generator(generator, discriminator, generator_loss_fn, generator_optimizer, batch_size, features, criterion_features, classifier,
-                    normalizer_clf, criterion_diversity_n, criterion_diversity_d, epsilon=10e-4):
+def train_generator(generator, discriminator, generator_loss_fn, generator_optimizer, batch_size, features, criterion_features, features_to_train,
+                    classifier, normalizer_clf, criterion_diversity_n, criterion_diversity_d, epsilon=10e-4):
     device = torch.device("cuda:0" if (torch.cuda.is_available()) else "cpu")
 
     generator.train()
@@ -90,8 +91,9 @@ def train_generator(generator, discriminator, generator_loss_fn, generator_optim
     fake_images_clf = normalizer_clf(fake_images)
     _, fake_features = classifier(fake_images_clf)
     need_init = True
-    for i in range(3, 4):
-        normalize_factor = features[i].shape[1] * features[i].shape[2]*features[i].shape[3]
+    content_loss = 0
+    for i in range(1, 4 + 1):
+        normalize_factor = features[i].shape[1] * features[i].shape[2] * features[i].shape[3]
         if need_init:
             need_init = False
             content_loss = (1/normalize_factor) * criterion_features(features[i], fake_features[i])
@@ -218,14 +220,10 @@ def _main():
             images_discriminator = normalizer_discriminator(images)
             images_clf = normalizer_clf(images)
             _, features = classifier(images_clf)
-            features_to_train = 3
             features = list(features)
-            for i in range(len(features)):
-                if i != features_to_train:
-                    features[i] = features[i] * 0
             if first_iter:
                 first_iter = False
-                fixed_features = tuple([torch.clone(features[x]) for x in range(len(features))])
+                fixed_features = [torch.clone(features[x]) for x in range(len(features))]
                 fixed_features_diversity = [torch.clone(features[x]) for x in range(len(features))]
                 for i in range(len(features)):
                     for j in range(fixed_features_diversity[i].shape[0]):
@@ -237,6 +235,10 @@ def _main():
                     orig_images_diversity[i] = orig_images_diversity[i % 8]
                 grid = vutils.make_grid(orig_images_diversity, padding=2, normalize=True, nrow=8)
                 vutils.save_image(grid, os.path.join(temp_results_dir, 'original_images_diversity.jpg'))
+            features_to_train = random.randint(1, 4)
+            for i in range(len(features)):
+                if i != features_to_train:
+                    features[i] = features[i] * 0
             discriminator_loss_dict = train_discriminator(generator, discriminator, criterion_discriminator, discriminator_optimizer, images_discriminator, features)
             for k, v in discriminator_loss_dict.items():
                 writer.add_scalar('D/%s' % k, v.data.cpu().numpy(), global_step=iterations)
@@ -244,7 +246,7 @@ def _main():
                     print('{}: {:.6f}'.format(k, v))
             if iterations % args.discriminator_steps == 1:
                 generator_loss_dict = train_generator(generator, discriminator, criterion_generator, generator_optimizer, images.shape[0], features,
-                                                      criterion_features, classifier, normalizer_clf, criterion_diversity_n, criterion_diversity_d)
+                                                      criterion_features, features_to_train, classifier, normalizer_clf, criterion_diversity_n, criterion_diversity_d)
                 for k, v in generator_loss_dict.items():
                     writer.add_scalar('G/%s' % k, v.data.cpu().numpy(), global_step=iterations//5 + 1)
                     if iterations % 30 == 1:
@@ -254,12 +256,30 @@ def _main():
                 torch.save(generator.state_dict(),  models_dir + '/' + args.model_name + 'G')
                 torch.save(discriminator.state_dict(), models_dir + '/' + args.model_name + 'D')
                 # regular sampling (64 different images)
-                fake_images = sample(generator, z, fixed_features)
+                first_features = True
+                fake_images = None
+                fake_images_diversity = None
+                for i in range(1, 5):
+                    one_level_features = list(fixed_features)
+                    one_level_features_diversity = list(fixed_features_diversity)
+                    # zero all features excepts the i'th level features
+                    for j in range(1, 5):
+                        if j != i:
+                            one_level_features[j] = one_level_features[j] * 0
+                            one_level_features_diversity[j] = one_level_features_diversity[j] * 0
+                    if first_features:
+                        first_features = False
+                        fake_images = sample(generator, z, one_level_features)
+                        fake_images_diversity = sample(generator, z, one_level_features_diversity)
+                    else:
+                        tmp_fake_images = sample(generator, z, one_level_features)
+                        fake_images = torch.vstack((fake_images, tmp_fake_images))
+                        tmp_fake_images = sample(generator, z2, one_level_features_diversity)
+                        fake_images_diversity = torch.vstack((fake_images_diversity, tmp_fake_images))
                 grid = vutils.make_grid(fake_images, padding=2, normalize=True, nrow=8)
                 vutils.save_image(grid, os.path.join(temp_results_dir, 'res_iter_{}.jpg'.format(iterations // 1000)))
                 # diversity sampling (8 different images each with 8 different noises)
-                fake_images = sample(generator, z2, fixed_features_diversity)
-                grid = vutils.make_grid(fake_images, padding=2, normalize=True, nrow=8)
+                grid = vutils.make_grid(fake_images_diversity, padding=2, normalize=True, nrow=8)
                 vutils.save_image(grid, os.path.join(temp_results_dir, 'div_iter_{}.jpg'.format(iterations // 1000)))
 
             if iterations % 20000 == 1:
