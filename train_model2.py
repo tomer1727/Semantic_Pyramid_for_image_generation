@@ -92,7 +92,7 @@ def train_generator(generator, discriminator, generator_loss_fn, generator_optim
     _, fake_features = classifier(fake_images_clf)
     need_init = True
     content_loss = 0
-    for i in range(1, 4 + 1):
+    for i in range(features_to_train, features_to_train + 1):
         normalize_factor = features[i].shape[1] * features[i].shape[2] * features[i].shape[3]
         if need_init:
             need_init = False
@@ -235,7 +235,8 @@ def _main():
                     orig_images_diversity[i] = orig_images_diversity[i % 8]
                 grid = vutils.make_grid(orig_images_diversity, padding=2, normalize=True, nrow=8)
                 vutils.save_image(grid, os.path.join(temp_results_dir, 'original_images_diversity.jpg'))
-            features_to_train = random.randint(1, 4)
+            # features_to_train = random.randint(1, 4)
+            features_to_train = 4
             for i in range(len(features)):
                 if i != features_to_train:
                     features[i] = features[i] * 0
@@ -259,7 +260,7 @@ def _main():
                 first_features = True
                 fake_images = None
                 fake_images_diversity = None
-                for i in range(1, 5):
+                for i in range(4, 5):
                     one_level_features = list(fixed_features)
                     one_level_features_diversity = list(fixed_features_diversity)
                     # zero all features excepts the i'th level features
