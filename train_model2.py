@@ -167,7 +167,7 @@ def _main():
     print('set data loader')
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=args.batch_size, shuffle=True, num_workers=4, pin_memory=True, drop_last=True)
 
-    classifier = torch.load("./classifier18")
+    classifier = torch.load("../try/classifier18")
     classifier.eval()
     generator = Generator(gen_type=args.gen_type)
     discriminator = Discriminator(args.discriminator_norm, dis_type=args.gen_type)
@@ -235,10 +235,9 @@ def _main():
                     orig_images_diversity[i] = orig_images_diversity[i % 8]
                 grid = vutils.make_grid(orig_images_diversity, padding=2, normalize=True, nrow=8)
                 vutils.save_image(grid, os.path.join(temp_results_dir, 'original_images_diversity.jpg'))
-            # features_to_train = random.randint(1, 4)
-            features_to_train = 4
+            features_to_train = random.choice([1, 2, 2, 3, 3, 3, 4, 4, 4, 4])
             for i in range(len(features)):
-                if i != features_to_train:
+                if i < features_to_train:
                     features[i] = features[i] * 0
             discriminator_loss_dict = train_discriminator(generator, discriminator, criterion_discriminator, discriminator_optimizer, images_discriminator, features)
             for k, v in discriminator_loss_dict.items():
@@ -260,12 +259,12 @@ def _main():
                 first_features = True
                 fake_images = None
                 fake_images_diversity = None
-                for i in range(4, 5):
+                for i in range(1, 5):
                     one_level_features = list(fixed_features)
                     one_level_features_diversity = list(fixed_features_diversity)
                     # zero all features excepts the i'th level features
                     for j in range(1, 5):
-                        if j != i:
+                        if j < i:
                             one_level_features[j] = one_level_features[j] * 0
                             one_level_features_diversity[j] = one_level_features_diversity[j] * 0
                     if first_features:
