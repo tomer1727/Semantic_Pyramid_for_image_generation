@@ -92,8 +92,9 @@ def train_generator(generator, discriminator, generator_loss_fn, generator_optim
     _, fake_features = classifier(fake_images_clf)
     need_init = True
     content_loss = 0
-    for i in range(features_to_train, features_to_train + 1):
-        normalize_factor = features[i].shape[1] * features[i].shape[2] * features[i].shape[3]
+    for i in range(features_to_train, 5):
+        # normalize_factor = features[i].shape[1] * features[i].shape[2] * features[i].shape[3]
+        normalize_factor = 1
         if need_init:
             need_init = False
             content_loss = (1/normalize_factor) * criterion_features(features[i], fake_features[i])
@@ -183,7 +184,7 @@ def _main():
 
     # losses + optimizers
     criterion_discriminator, criterion_generator = get_wgan_losses_fn()
-    criterion_features = nn.MSELoss()
+    criterion_features = nn.L1Loss()
     criterion_diversity_n = nn.L1Loss()
     criterion_diversity_d = nn.L1Loss()
     generator_optimizer = optim.Adam(generator.parameters(), lr=args.lr, betas=(0.5, 0.999))
