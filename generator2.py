@@ -1,4 +1,5 @@
 import torch.nn as nn
+import torch
 
 
 def init_weights(m):
@@ -71,19 +72,19 @@ class GeneratorBlock(nn.Module):
             self.features_conv_block = ConvBlock(in_channels, out_channels, 4, stride=2, padding=1)
         else: # resnet generator
             self.conv_block1 = ResidualBlock(in_channels, out_channels)
-            self.upsample = nn.UpsamplingNearest2d(scale_factor=2)
-            self.features_conv_block = ConvBlock(in_channels, out_channels, 3, conv_type='conv')
+            # self.upsample = nn.UpsamplingNearest2d(scale_factor=2)
+            # self.features_conv_block = ConvBlock(in_channels, out_channels, 3, conv_type='conv')
 
-    def forward(self, gen, features):
+    def forward(self, gen):
         gen = self.conv_block1(gen)
-        if self.gen_type == 'res':
-            features = self.upsample(features)
-        features = self.features_conv_block(features)
-        return gen + features
+        # if self.gen_type == 'res':
+        #     features = self.upsample(features)
+        # features = self.features_conv_block(features)
+        return gen # + features
 
     def init_weights(self):
         self.conv_block1.init_weights()
-        self.features_conv_block.init_weights()
+        # self.features_conv_block.init_weights()
 
 
 class Generator(nn.Module):
@@ -111,19 +112,26 @@ class Generator(nn.Module):
             self.last_conv = nn.Conv2d(64, 3, kernel_size=3, stride=1, padding=1)
         self.tanh = nn.Tanh()
 
-    def forward(self, noise, features):
+    def forward(self, noise, features, level):
+        next_level_features = None
         # noise has dimension 128 * 1 * 1
         x = self.conv_block1(noise)
         x = self.conv_block2(x)
-        x = self.conv_block3(x, features[4])
-        x = self.conv_block4(x, features[3])
-        x = self.conv_block5(x, features[2])
-        x = self.conv_block6(x, features[1])
+        x = self.conv_block3(x if level != 4 else features[4])
+        if level == 4:
+            next_level_features = x
+        x = self.conv_block4(x if level != 3 else features[3])
+        if level == 3:
+            next_level_features = x
+        x = self.conv_block5(x if level != 2 else features[2])
+        if level == 2:
+            next_level_features = x
+        x = self.conv_block6(x if level != 1 else features[1])
         if self.gen_type == 'res':
             x = self.conv_block7(x)
         x = self.last_conv(x)
         x = self.tanh(x)
-        return x
+        return x, next_level_features
 
     def init_weights(self):
         self.conv_block1.init_weights()
