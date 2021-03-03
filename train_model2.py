@@ -83,44 +83,44 @@ def train_generator(generator, discriminator, generator_loss_fn, generator_optim
     z = torch.randn(batch_size, 128, 1, 1, device=device)
 
     fake_images, next_level_created_features = generator(z, features, features_to_train)
-    # wgan-gp loss
-    fake_images_d_logit = discriminator(fake_images)
-    generator_loss = generator_loss_fn(fake_images_d_logit)
 
-    # content loss (reconstruction loss)
-    fake_images_clf = normalizer_clf(fake_images)
-    _, fake_features = classifier(fake_images_clf)
-    need_init = True
-    content_loss = 0
-    for i in range(1, 4 + 1):
-        # normalize_factor = features[i].shape[1] * features[i].shape[2] * features[i].shape[3]
-        normalize_factor = 1
-        if need_init:
-            need_init = False
-            content_loss = (1/normalize_factor) * criterion_features(features[i], fake_features[i])
-        else:
-            content_loss += (1/normalize_factor) * criterion_features(features[i], fake_features[i])
+    if features_to_train == 1:
+        # wgan-gp loss
+        fake_images_d_logit = discriminator(fake_images)
+        generator_loss = generator_loss_fn(fake_images_d_logit)
 
-    # diversity loss
-    # z2 = torch.randn(batch_size, 128, 1, 1, device=device)
-    # fake_images2 = generator(z2, features)
-    # diversity_loss = criterion_diversity_n(z, z2) / (criterion_diversity_d(fake_images, fake_images2) + epsilon)
+        # content loss (reconstruction loss)
+        fake_images_clf = normalizer_clf(fake_images)
+        _, fake_features = classifier(fake_images_clf)
+        need_init = True
+        content_loss = 0
+        for i in range(1, 4 + 1):
+            # normalize_factor = features[i].shape[1] * features[i].shape[2] * features[i].shape[3]
+            normalize_factor = 1
+            if need_init:
+                need_init = False
+                content_loss = (1/normalize_factor) * criterion_features(features[i], fake_features[i])
+            else:
+                content_loss += (1/normalize_factor) * criterion_features(features[i], fake_features[i])
 
-    total_loss = generator_loss + content_loss # + diversity_loss
+        # diversity loss
+        # z2 = torch.randn(batch_size, 128, 1, 1, device=device)
+        # fake_images2 = generator(z2, features)
+        # diversity_loss = criterion_diversity_n(z, z2) / (criterion_diversity_d(fake_images, fake_images2) + epsilon)
 
+        total_loss = generator_loss + content_loss # + diversity_loss
+        losses_dictionary = {'g_loss': generator_loss, 'content_loss': content_loss, 'total_loss': total_loss}
+        # losses_dictionary['diversity loss'] = diversity_loss
     # next level features loss
-    if next_level_created_features is not None:
+    else:
         next_level_created_features_loss = criterion_next_level_features(features[features_to_train - 1], next_level_created_features)
-        total_loss += next_level_created_features_loss
+        total_loss = next_level_created_features_loss
+        losses_dictionary = {'next_level_loss': next_level_created_features_loss}
 
     generator.zero_grad()
     total_loss.backward()
     generator_optimizer.step()
 
-    losses_dictionary = {'g_loss': generator_loss, 'content_loss': content_loss, 'total_loss': total_loss}
-    # losses_dictionary['diversity loss'] = diversity_loss
-    if next_level_created_features is not None:
-        losses_dictionary['next_level_loss'] = next_level_created_features_loss
     return losses_dictionary
 
 
@@ -248,14 +248,10 @@ def _main():
                 # grid = vutils.make_grid(orig_images_diversity, padding=2, normalize=True, nrow=8)
                 # vutils.save_image(grid, os.path.join(temp_results_dir, 'original_images_diversity.jpg'))
             features_to_train = 1
-            if iterations < 3000:
+            if iterations < 5000:
                 features_to_train = 1
-            elif iterations < 8000:
-                features_to_train = random.randint(1, 2)
-            elif iterations < 16000:
-                features_to_train = random.randint(1, 3)
             else:
-                features_to_train = random.randint(1, 4)
+                features_to_train = random.randint(1, 2)
 
             # for i in range(len(features)):
             #     if i < features_to_train:
@@ -281,7 +277,7 @@ def _main():
                 first_features = True
                 fake_images = None
                 # fake_images_diversity = None
-                for features_level in range(1, 5):
+                for features_level in range(1, 3):
                     one_level_features = list(fixed_features)
                     # one_level_features_diversity = list(fixed_features_diversity)
                     # zero all features excepts the i'th level features
