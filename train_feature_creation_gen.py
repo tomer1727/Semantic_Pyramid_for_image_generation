@@ -17,7 +17,7 @@ import torchvision.utils as vutils
 from classifier import Classifier
 from generator2 import Generator
 from discriminator2 import Discriminator
-from featuresCreatorGen import Features1ToImage, Features2ToFeatures1
+from featuresCreatorGen import Features1ToImage, LevelUpFeaturesGenerator
 
 
 def print_gpu_details():
@@ -44,11 +44,15 @@ def train_generator(features_gen, features_gen_optimizer, features, features_to_
     return losses_dictionary
 
 
-def sample(f1_to_img, f2_to_f1, features):
+def sample(f1_to_img, features_generator, features, features_level):
     with torch.no_grad():
-        f2_to_f1.eval()
+        for features_gen in features_generator:
+            features_gen.eval()
         f1_to_img.eval()
-        return f1_to_img(f2_to_f1(features[2]))
+        features_to_use = features[features_level]
+        for i in range(features_level - 2, -1, -1):
+            features_to_use = features_generator[i](features_to_use)
+        return f1_to_img(features_to_use)
 
 
 def _main():
@@ -75,19 +79,21 @@ def _main():
     classifier = torch.load("../try/classifier18")
     classifier.eval()
     classifier.to(device)
-    features1ToImage_gen = Features1ToImage()
-    features1ToImage_gen.load_state_dict(torch.load('./features_creator_models/features1_to_image'))
-    features1ToImage_gen.eval()
-    features1ToImage_gen.to(device)
-    features2ToFeatures1_gen = Features2ToFeatures1()
-    features2ToFeatures1_gen.to(device)
-
-    # weights init
-    features2ToFeatures1_gen.init_weights()
+    features1_to_image_gen = Features1ToImage()
+    features1_to_image_gen.load_state_dict(torch.load('./features_creator_models/features1_to_image'))
+    features1_to_image_gen.eval()
+    features1_to_image_gen.to(device)
+    features_generators = [LevelUpFeaturesGenerator(input_level_features=i) for i in range(2, 5)]
+    for i, features_gen in enumerate(features_generators):
+        input_level_features = i + 2
+        features_gen.to(device)
+        # weights init
+        features_gen.load_state_dict(torch.load('./features_creator_models/features{}_to_features{}'.format(input_level_features, input_level_features - 1)))
+        # features_gen.init_weights()
 
     # losses + optimizers
-    criterion_next_level_features = nn.MSELoss()
-    features_gen_optimizer = optim.Adam(features2ToFeatures1_gen.parameters(), lr=args.lr, betas=(0.5, 0.999))
+    next_level_features_criterions = [nn.MSELoss() for i in range(2, 5)]
+    optimizers = [optim.Adam(features_gen.parameters(), lr=args.lr, betas=(0.5, 0.999)) for features_gen in features_generators]
 
     num_of_epochs = args.epochs
 
@@ -106,6 +112,7 @@ def _main():
     fixed_features = 0
     first_iter = True
     print("Starting Training Loop...")
+    train_features_dictionary = {0: 2, 1: 3, 2: 3, 3: 4, 4: 4, 5: 4}
     for epoch in range(num_of_epochs):
         for data in train_loader:
             iterations += 1
@@ -122,22 +129,30 @@ def _main():
                 fixed_features = [torch.clone(features[x]) for x in range(len(features))]
                 grid = vutils.make_grid(images, padding=2, normalize=False, nrow=8)
                 vutils.save_image(grid, os.path.join(temp_results_dir, 'original_images.jpg'))
-            features_to_train = 2
-            generator_loss_dict = train_generator(features2ToFeatures1_gen, features_gen_optimizer, features, features_to_train, criterion_next_level_features)
-            for k, v in generator_loss_dict.items():
-                writer.add_scalar('G/%s' % k, v.data.cpu().numpy(), global_step=iterations//1 + 1)
-                if iterations % 30 == 1:
-                    print('{}: {:.6f}'.format(k, v))
+            for i, features_gen in enumerate(features_generators):
+                features_to_train = i + 2
+                if i != train_features_dictionary[iterations % 6]:
+                    continue
+                generator_loss_dict = train_generator(features_gen, optimizers[i], features, features_to_train, next_level_features_criterions[i])
+                for k, v in generator_loss_dict.items():
+                    writer.add_scalar('G/f' + str(features_to_train) + '_%s' % k, v.data.cpu().numpy(), global_step=iterations//1 + 1)
+                    if iterations % 30 == 1:
+                        print('{}: {:.6f}'.format(k, v))
 
             if iterations < 10000 and iterations % 2000 == 1 or iterations % 4000 == 1:
-                torch.save(features2ToFeatures1_gen.state_dict(),  models_dir + '/' + args.model_name + 'f2_to_f1')
-                # regular sampling (#batch_size different images)
-                fake_images = sample(features1ToImage_gen, features2ToFeatures1_gen, fixed_features)
-                grid = vutils.make_grid(fake_images, padding=2, normalize=True, nrow=8)
-                vutils.save_image(grid, os.path.join(temp_results_dir, 'res_iter_{}.jpg'.format(iterations // 1000)))
+                for i, features_gen in enumerate(features_generators):
+                    features_level = i + 2
+                    torch.save(features_gen.state_dict(),  models_dir + '/' + args.model_name + '_f{}_to_f{}'.format(features_level, features_level - 1))
+                    # regular sampling (#batch_size different images)
+                    fake_images = sample(features1_to_image_gen, features_generators, fixed_features, features_level)
+                    grid = vutils.make_grid(fake_images, padding=2, normalize=True, nrow=8)
+                    vutils.save_image(grid, os.path.join(temp_results_dir, 'res_iter_{}_origin_f{}.jpg'.format(iterations // 2000, features_level)))
 
             if iterations % 20000 == 1:
-                torch.save(features2ToFeatures1_gen.state_dict(), models_dir + '/' + args.model_name + 'f2_to_f1_' + str(iterations // 15000))
+                for i, features_gen in enumerate(features_generators):
+                    features_level = i + 2
+                    torch.save(features_gen.state_dict(), models_dir + '/' + args.model_name + '_f{}_to_f{}_'.format(features_level, features_level - 1) + str(iterations // 20000))
+
 
 
 if __name__ == '__main__':

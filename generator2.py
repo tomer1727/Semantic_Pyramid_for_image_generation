@@ -65,20 +65,28 @@ class ResidualBlock(nn.Module):
 
 
 class GeneratorBlock(nn.Module):
-    # gen_type param is the generator param, default for the regular implementation, res for resnet implementation
+    """
+    gen_type param is the generator param, 'default' for the regular implementation, 'res' for resnet implementation,
+    'double_res' for 2 res blocks per level instead of 1
+    """
     def __init__(self, in_channels, out_channels, gen_type='default'):
         super().__init__()
         self.gen_type = gen_type
         if gen_type == 'default':
             self.conv_block1 = ConvBlock(in_channels, out_channels, 4, stride=2, padding=1)
             self.features_conv_block = ConvBlock(in_channels, out_channels, 4, stride=2, padding=1)
-        else: # resnet generator
+        elif gen_type == 'res': # resnet generator
             self.conv_block1 = ResidualBlock(in_channels, out_channels)
             # self.upsample = nn.UpsamplingNearest2d(scale_factor=2)
             # self.features_conv_block = ConvBlock(in_channels, out_channels, 3, conv_type='conv')
+        elif gen_type == 'double_res':
+            self.conv_block1 = ResidualBlock(in_channels, in_channels, need_upsample=True)
+            self.conv_block2 = ResidualBlock(in_channels, out_channels, need_upsample=False)
 
     def forward(self, gen):
         gen = self.conv_block1(gen)
+        if self.gen_type == 'double_res':
+            gen = self.conv_block2(gen)
         # if self.gen_type == 'res':
         #     features = self.upsample(features)
         # features = self.features_conv_block(features)
@@ -86,6 +94,8 @@ class GeneratorBlock(nn.Module):
 
     def init_weights(self):
         self.conv_block1.init_weights()
+        if self.gen_type == 'double_res':
+            self.conv_block2.init_weights()
         # self.features_conv_block.init_weights()
 
 
@@ -104,11 +114,11 @@ class Generator(nn.Module):
         # 32x32 -> 64x64
         self.conv_block5 = GeneratorBlock(128, 64, gen_type)
         # 64x64 -> 128x128
-        self.conv_block6 = GeneratorBlock(64, 64, gen_type)
+        self.conv_block6 = GeneratorBlock(64, 64, gen_type if gen_type != 'double_res' else 'res') # single res block even for double_res generator
         if gen_type == 'default':
             # 128x128 -> 256x256
             self.last_conv = nn.ConvTranspose2d(64, 3, kernel_size=4, stride=2, padding=1)
-        else: # resnet generator
+        elif gen_type == 'res' or gen_type == 'double_res': # resnet generator
             # 128x128 -> 256x256
             self.conv_block7 = ResidualBlock(64, 64)
             self.last_conv = nn.Conv2d(64, 3, kernel_size=3, stride=1, padding=1)
@@ -129,7 +139,7 @@ class Generator(nn.Module):
         if level == 2:
             next_level_features = x
         x = self.conv_block6(x if level != 1 else features[1])
-        if self.gen_type == 'res':
+        if self.gen_type == 'res' or self.gen_type == 'double_res':
             x = self.conv_block7(x)
         x = self.last_conv(x)
         x = self.tanh(x)
