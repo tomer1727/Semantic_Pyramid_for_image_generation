@@ -74,7 +74,7 @@ def gradient_penalty(f, real, fake):
     return gp
 
 
-def train_generator(generator, discriminator, generator_loss_fn, generator_optimizer, batch_size, features, classifier, normalizer_clf, masks, train_type, features_to_train):
+def train_generator(generator, discriminator, generator_loss_fn, generator_optimizer, batch_size, features, classifier, normalizer_clf, masks, train_type, features_to_train, criterion_features):
     device = torch.device("cuda:0" if (torch.cuda.is_available()) else "cpu")
 
     generator.train()
@@ -89,7 +89,7 @@ def train_generator(generator, discriminator, generator_loss_fn, generator_optim
     fake_images_clf = normalizer_clf(fake_images)
     _, fake_features = classifier(fake_images_clf)
 
-    features_loss = getLossByTrainType(features, masks, train_type, features_to_train, fake_features)
+    features_loss = getLossByTrainType(features, masks, train_type, features_to_train, fake_features, criterion_features)
     total_loss = generator_loss + features_loss
     generator.zero_grad()
     total_loss.backward()
@@ -133,13 +133,13 @@ def isolate_layer(fixed_features, selected_layer, device):
             res[i] = torch.zeros(res[i].shape, device=device)
     return res
 
-def setCroppedMask(random_crop, mask, window_len=0.45):
+def setCroppedMask(random_crop, mask, window_len=0.4):
     x_start = math.floor((random_crop[0]/100) * mask.shape[2])
     y_start = math.floor((random_crop[1]/100) * mask.shape[3])
     x_end = x_start +  math.floor(window_len * mask.shape[2])
     y_end = y_start + math.floor(window_len * mask.shape[3])
     #print('setCroppedMask- X:({},{}) Y:({},{})'.format(x_start,x_end,y_start,y_end))
-    mask[:,:, x_start:x_end, y_start:y_end] = 1
+    mask[:,:, x_start:x_end, y_start:y_end] = 0
     return mask
 
 def setMasksPart1(masks, device, random_layer_idx):
@@ -152,25 +152,24 @@ def setMasksPart1(masks, device, random_layer_idx):
             masks[idx] = mask*0
 
 def setMasksPart2(masks, device, random_layer_idx):
-    random_crop = (random.randint(0, 50), random.randint(0, 50)) # randomize the percentage of mask indexes
+    random_crop = (random.randint(20, 40), random.randint(20, 40)) # randomize the percentage of mask indexes
     masks[random_layer_idx] = torch.ones(masks[random_layer_idx].shape, device=device)
     for idx,mask in enumerate(masks):
         if idx < random_layer_idx:
             # Pass a part of the feature layer
-            masks[idx] = setCroppedMask(random_crop, torch.zeros(mask.shape, device=device))
+            masks[idx] = setCroppedMask(random_crop, torch.ones(mask.shape, device=device))
         else:
             # Block the feature layer
             masks[idx] = mask*0
 
-def getLossByTrainType(features, masks, train_type, features_to_train, outputs_images_features):
-    criterion_features = nn.MSELoss()
+def getLossByTrainType(features, masks, train_type, features_to_train, outputs_images_features, criterion_features):
     if train_type == 1:
         loss_features = criterion_features(features[features_to_train], outputs_images_features[features_to_train])
     else:
         loss_features = criterion_features(features[0]*masks[0], outputs_images_features[0]*masks[0])
         for i in range(1, features_to_train + 1):
             loss_features += criterion_features(features[i]*masks[i], outputs_images_features[i]*masks[i])  # calculate loss
-    return loss_features
+    return loss_features*(1/features_to_train)*200
 
 def _main():
     print_gpu_details()
@@ -212,7 +211,7 @@ def _main():
 
     # losses + optimizers
     criterion_discriminator, criterion_generator = get_wgan_losses_fn()
-    #criterion_features = nn.MSELoss()
+    criterion_features = nn.L1Loss()
     generator_optimizer = optim.Adam(generator.parameters(), lr=args.lr, betas=(0.5, 0.999))
     discriminator_optimizer = optim.Adam(discriminator.parameters(), lr=args.lr, betas=(0.5, 0.999))
 
@@ -272,13 +271,13 @@ def _main():
                 if iterations % 30 == 1:
                     print('{}: {:.6f}'.format(k, v))
             if iterations % args.discriminator_steps == 1:
-                generator_loss_dict = train_generator(generator, discriminator, criterion_generator, generator_optimizer, images.shape[0], features, classifier, normalizer_clf, masks, train_type, features_to_train)
+                generator_loss_dict = train_generator(generator, discriminator, criterion_generator, generator_optimizer, images.shape[0], features, classifier, normalizer_clf, masks, train_type, features_to_train, criterion_features)
                 for k, v in generator_loss_dict.items():
                     writer.add_scalar('G/%s' % k, v.data.cpu().numpy(), global_step=iterations//5 + 1)
                     if iterations % 30 == 1:
                         print('{}: {:.6f}'.format(k, v))
 
-            if iterations % 2000 == 1:
+            if iterations < 10000 and iterations % 1000 == 1 or iterations % 2000 == 1:
                 torch.save(generator.state_dict(),  models_dir + '/' + args.model_name + 'G')
                 torch.save(discriminator.state_dict(), models_dir + '/' + args.model_name + 'D')
                 for i in range(1,len(fixed_features)-1):
@@ -307,7 +306,7 @@ if __name__ == '__main__':
     parser.add_argument('--gradient-penalty-weight', type=float, default=10.0)
     parser.add_argument('--discriminator-steps', type=int, default=5)
     parser.add_argument('--train-path', default='/home/dcor/datasets/places365')
-    parser.add_argument('--train1-prob', default=0.7, type=float)
+    parser.add_argument('--train1-prob', default=0.6, type=float)
     args = parser.parse_args()
     print(args)
     if args.model_name is None:
