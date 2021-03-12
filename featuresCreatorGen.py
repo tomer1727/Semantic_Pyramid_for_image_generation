@@ -1,4 +1,5 @@
 from generator2 import *
+from discriminator2 import DiscriminatorBlock
 import torch
 import os
 
@@ -67,3 +68,31 @@ def build_generator_from_features_gen():
         generator_blocks[i].conv_block1 = features_generators[i + 1].res_block1 # i + 1 to skip f1_to_img gen
         generator_blocks[i].conv_block2 = features_generators[i + 1].res_block2
     torch.save(generator.state_dict(), os.path.join(features_generators_dir, 'full_generator'))
+
+
+class FeaturesDiscriminator(nn.Module):
+    def __init__(self, norm, dis_type):
+        super().__init__()
+        self.dis_type = dis_type
+        # 32x32 -> 16x16
+        self.conv_block3 = DiscriminatorBlock(128, 256, dis_type=dis_type, norm=norm)
+        # 16x16 -> 8x8
+        self.conv_block4 = DiscriminatorBlock(256, 512, dis_type=dis_type, norm=norm)
+        # 8x8 -> 4x4
+        self.conv_block5 = DiscriminatorBlock(512, 512, dis_type=dis_type, norm=norm)
+        # 4x4 -> 1x1
+        self.last_conv = nn.Conv2d(512, 1, 4, stride=1, padding=0)
+
+    def forward(self, x):
+        x = self.conv_block3(x)
+        x = self.conv_block4(x)
+        x = self.conv_block5(x)
+        x = self.last_conv(x)
+        return x
+
+    def init_weights(self):
+        self.conv_block3.init_weights()
+        self.conv_block4.init_weights()
+        self.conv_block5.init_weights()
+        self.last_conv.apply(init_weights)
+

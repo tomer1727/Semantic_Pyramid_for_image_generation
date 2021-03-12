@@ -17,7 +17,8 @@ import torchvision.utils as vutils
 from classifier import Classifier
 from generator2 import Generator
 from discriminator2 import Discriminator
-from featuresCreatorGen import Features1ToImage, LevelUpFeaturesGenerator
+from featuresCreatorGen import Features1ToImage, LevelUpFeaturesGenerator, FeaturesDiscriminator
+from train_model2 import get_wgan_losses_fn, sample_line, norm, one_mean_gp, gradient_penalty
 
 
 def print_gpu_details():
@@ -29,19 +30,51 @@ def print_gpu_details():
         print('Num of GPUs:', torch.cuda.device_count())
 
 
-def train_generator(features_gen, features_gen_optimizer, features, features_to_train, criterion_next_level_features):
+def train_generator(features_gen, discriminator, classifier, features_gen_optimizer, features, features_to_train, generator_loss_fn, criterion_features, next_level_features_criterion):
     features_gen.train()
+    discriminator.train()
 
     next_level_created_features = features_gen(features[features_to_train])
 
-    next_level_created_features_loss = criterion_next_level_features(features[features_to_train - 1], next_level_created_features)
-    losses_dictionary = {'next_level_loss': next_level_created_features_loss}
+    # wgan-gp loss
+    fake_images_d_logit = discriminator(next_level_created_features)
+    generator_loss = generator_loss_fn(fake_images_d_logit)
 
+    # features loss
+    reconstruct_features = classifier.layer3(next_level_created_features)
+    features_loss = criterion_features(features[features_to_train], reconstruct_features)
+
+    # next level loss
+    next_level_features_loss = next_level_features_criterion(next_level_created_features, features[features_to_train - 1])
+
+    losses_dictionary = {'generator_loss': generator_loss, 'features_loss': features_loss, 'next_level_loss': next_level_features_loss}
+    total_loss = generator_loss + features_loss + 0.2 * next_level_features_loss
     features_gen.zero_grad()
-    next_level_created_features_loss.backward()
+    total_loss.backward()
     features_gen_optimizer.step()
 
     return losses_dictionary
+
+
+def train_discriminator(features_gen, discriminator, discriminator_loss_fn, discriminator_optimizer, features, features_to_train):
+    features_gen.train()
+    discriminator.train()
+
+    fake_features = features_gen(features[features_to_train]).detach()
+
+    real_features_d_logit = discriminator(features[features_to_train - 1])
+    fake_features_d_logit = discriminator(fake_features)
+
+    real_features_d_logit, fake_features_d_logit = discriminator_loss_fn(real_features_d_logit, fake_features_d_logit)
+    gp = gradient_penalty(functools.partial(discriminator), features[features_to_train - 1], fake_features)
+
+    discriminator_loss = (real_features_d_logit + fake_features_d_logit) + gp * args.gradient_penalty_weight
+
+    discriminator.zero_grad()
+    discriminator_loss.backward()
+    discriminator_optimizer.step()
+
+    return {'d_loss': real_features_d_logit + fake_features_d_logit, 'gp': gp}
 
 
 def sample(f1_to_img, features_generator, features, features_level):
@@ -83,17 +116,29 @@ def _main():
     features1_to_image_gen.load_state_dict(torch.load('./features_creator_models/features1_to_image'))
     features1_to_image_gen.eval()
     features1_to_image_gen.to(device)
-    features_generators = [LevelUpFeaturesGenerator(input_level_features=i) for i in range(2, 5)]
+    features_generators = [LevelUpFeaturesGenerator(input_level_features=i) for i in range(2, 4)]
     for i, features_gen in enumerate(features_generators):
         input_level_features = i + 2
         features_gen.to(device)
         # weights init
-        features_gen.load_state_dict(torch.load('./features_creator_models/features{}_to_features{}'.format(input_level_features, input_level_features - 1)))
-        # features_gen.init_weights()
+        if input_level_features != 3:
+            features_gen.load_state_dict(torch.load('./features_creator_models/features{}_to_features{}'.format(input_level_features, input_level_features - 1)))
+            features_gen.eval()
+        else:
+            features_gen.init_weights()
+
+    discriminator = FeaturesDiscriminator(args.discriminator_norm, dis_type=args.gen_type)
+    discriminator.to(device)
+    discriminator.init_weights()
 
     # losses + optimizers
-    next_level_features_criterions = [nn.MSELoss() for i in range(2, 5)]
-    optimizers = [optim.Adam(features_gen.parameters(), lr=args.lr, betas=(0.5, 0.999)) for features_gen in features_generators]
+    criterion_discriminator, criterion_generator = get_wgan_losses_fn()
+    # next_level_features_criterions = [nn.MSELoss() for i in range(2, 5)]
+    next_level_features_criterion = nn.L1Loss()
+    criterion_features = nn.L1Loss()
+    # optimizers = [optim.Adam(features_gen.parameters(), lr=args.lr, betas=(0.5, 0.999)) for features_gen in features_generators]
+    gen_optimizer = optim.Adam(features_generators[1].parameters(), lr=args.lr, betas=(0.5, 0.999)) # train only f3_to_f2
+    discriminator_optimizer = optim.Adam(discriminator.parameters(), lr=args.lr, betas=(0.5, 0.999))
 
     num_of_epochs = args.epochs
 
@@ -112,7 +157,7 @@ def _main():
     fixed_features = 0
     first_iter = True
     print("Starting Training Loop...")
-    train_features_dictionary = {0: 2, 1: 3, 2: 3, 3: 4, 4: 4, 5: 4}
+    features_to_train = 3
     for epoch in range(num_of_epochs):
         for data in train_loader:
             iterations += 1
@@ -129,11 +174,16 @@ def _main():
                 fixed_features = [torch.clone(features[x]) for x in range(len(features))]
                 grid = vutils.make_grid(images, padding=2, normalize=False, nrow=8)
                 vutils.save_image(grid, os.path.join(temp_results_dir, 'original_images.jpg'))
-            for i, features_gen in enumerate(features_generators):
-                features_to_train = i + 2
-                if i != train_features_dictionary[iterations % 6]:
-                    continue
-                generator_loss_dict = train_generator(features_gen, optimizers[i], features, features_to_train, next_level_features_criterions[i])
+
+            if iterations % (args.discriminator_steps + 1) != 1:
+                discriminator_loss_dict = train_discriminator(features_generators[1], discriminator, criterion_discriminator, discriminator_optimizer, features, features_to_train)
+                for k, v in discriminator_loss_dict.items():
+                    writer.add_scalar('D/%s' % k, v.data.cpu().numpy(), global_step=iterations)
+                    if iterations % 30 == 1:
+                        print('{}: {:.6f}'.format(k, v))
+            else:
+                generator_loss_dict = train_generator(features_generators[1], discriminator, classifier, gen_optimizer, features,
+                                                      features_to_train, criterion_generator, criterion_features, next_level_features_criterion)
                 for k, v in generator_loss_dict.items():
                     writer.add_scalar('G/f' + str(features_to_train) + '_%s' % k, v.data.cpu().numpy(), global_step=iterations//1 + 1)
                     if iterations % 30 == 1:
@@ -142,17 +192,17 @@ def _main():
             if iterations < 10000 and iterations % 2000 == 1 or iterations % 4000 == 1:
                 for i, features_gen in enumerate(features_generators):
                     features_level = i + 2
-                    torch.save(features_gen.state_dict(),  models_dir + '/' + args.model_name + '_f{}_to_f{}'.format(features_level, features_level - 1))
-                    # regular sampling (#batch_size different images)
-                    fake_images = sample(features1_to_image_gen, features_generators, fixed_features, features_level)
-                    grid = vutils.make_grid(fake_images, padding=2, normalize=True, nrow=8)
-                    vutils.save_image(grid, os.path.join(temp_results_dir, 'res_iter_{}_origin_f{}.jpg'.format(iterations // 2000, features_level)))
+                    if features_level == 3: # for now print only level 3 output
+                        torch.save(features_gen.state_dict(),  models_dir + '/' + args.model_name + '_f{}_to_f{}'.format(features_level, features_level - 1))
+                        # regular sampling (#batch_size different images)
+                        fake_images = sample(features1_to_image_gen, features_generators, fixed_features, features_level)
+                        grid = vutils.make_grid(fake_images, padding=2, normalize=True, nrow=8)
+                        vutils.save_image(grid, os.path.join(temp_results_dir, 'res_iter_{}_origin_f{}.jpg'.format(iterations // 2000, features_level)))
 
             if iterations % 20000 == 1:
                 for i, features_gen in enumerate(features_generators):
                     features_level = i + 2
                     torch.save(features_gen.state_dict(), models_dir + '/' + args.model_name + '_f{}_to_f{}_'.format(features_level, features_level - 1) + str(iterations // 20000))
-
 
 
 if __name__ == '__main__':

@@ -57,7 +57,7 @@ class ResidualBlock(nn.Module):
         self.downsample = nn.AvgPool2d(2)
 
     def forward(self, x):
-        residual = self.self.skip_block(x)
+        residual = self.skip_block(x)
         x = self.conv_block1(x)
         x = self.conv_block2(x)
         x += residual
@@ -68,7 +68,7 @@ class ResidualBlock(nn.Module):
     def init_weights(self):
         self.conv_block1.init_weights()
         self.conv_block2.init_weights()
-        self.skip_block.apply(init_weights)
+        self.skip_block.init_weights()
 
 
 class DiscriminatorBlock(nn.Module):
@@ -102,15 +102,15 @@ class Discriminator(nn.Module):
             self.leaky_relu = nn.LeakyReLU(0.2, True)
             self.avg_pool = nn.AvgPool2d(2)
         # 128x128 -> 64x64
-        self.conv_block1 = DiscriminatorBlock(64, 64, norm=norm)
+        self.conv_block1 = DiscriminatorBlock(64, 64, dis_type=dis_type, norm=norm)
         # 64x64 -> 32x32
-        self.conv_block2 = DiscriminatorBlock(64, 128, norm=norm)
+        self.conv_block2 = DiscriminatorBlock(64, 128, dis_type=dis_type, norm=norm)
         # 32x32 -> 16x16
-        self.conv_block3 = DiscriminatorBlock(128, 256, norm=norm)
+        self.conv_block3 = DiscriminatorBlock(128, 256, dis_type=dis_type, norm=norm)
         # 16x16 -> 8x8
-        self.conv_block4 = DiscriminatorBlock(256, 512, norm=norm)
+        self.conv_block4 = DiscriminatorBlock(256, 512, dis_type=dis_type, norm=norm)
         # 8x8 -> 4x4
-        self.conv_block5 = DiscriminatorBlock(512, 512, norm=norm)
+        self.conv_block5 = DiscriminatorBlock(512, 512, dis_type=dis_type, norm=norm)
         # 4x4 -> 1x1
         self.last_conv = nn.Conv2d(512, 1, 4, stride=1, padding=0)
 
