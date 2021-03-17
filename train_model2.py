@@ -133,13 +133,13 @@ def isolate_layer(fixed_features, selected_layer, device):
             res[i] = torch.zeros(res[i].shape, device=device)
     return res
 
-def setCroppedMask(random_crop, mask, window_len=0.4):
+def setCroppedMask(random_crop, mask, window_len1=0.45, window_len2=0.45, window_data=0):
     x_start = math.floor((random_crop[0]/100) * mask.shape[2])
     y_start = math.floor((random_crop[1]/100) * mask.shape[3])
-    x_end = x_start +  math.floor(window_len * mask.shape[2])
-    y_end = y_start + math.floor(window_len * mask.shape[3])
+    x_end = x_start +  math.floor(window_len1 * mask.shape[2])
+    y_end = y_start + math.floor(window_len2 * mask.shape[3])
     #print('setCroppedMask- X:({},{}) Y:({},{})'.format(x_start,x_end,y_start,y_end))
-    mask[:,:, x_start:x_end, y_start:y_end] = 0
+    mask[:,:, x_start:x_end, y_start:y_end] = window_data
     return mask
 
 def setMasksPart1(masks, device, random_layer_idx):
@@ -162,12 +162,24 @@ def setMasksPart2(masks, device, random_layer_idx):
             # Block the feature layer
             masks[idx] = mask*0
 
+def setMasks(masks, device, layer_idx):
+    random_crop = (25, 25)
+    #masks[layer_idx] = setCroppedMask(random_crop, torch.ones(masks[layer_idx].shape, device=device))
+    for idx,mask in enumerate(masks):
+        if idx == 4 or idx == 3:
+            masks[idx] = mask*0
+            continue
+        if idx <= layer_idx:
+            masks[idx] = setCroppedMask(random_crop, torch.zeros(mask.shape, device=device), 0.65, 0.35, 1)
+        else:
+            masks[idx] = mask*1
+
 def getLossByTrainType(features, masks, train_type, features_to_train, outputs_images_features, criterion_features):
     if train_type == 1:
         loss_features = criterion_features(features[features_to_train], outputs_images_features[features_to_train])
     else:
-        loss_features = criterion_features(features[0]*masks[0], outputs_images_features[0]*masks[0])
-        for i in range(1, features_to_train + 1):
+        loss_features = criterion_features(features[1]*masks[1], outputs_images_features[1]*masks[1])
+        for i in range(2, features_to_train + 1):
             loss_features += criterion_features(features[i]*masks[i], outputs_images_features[i]*masks[i])  # calculate loss
     return loss_features*(1/features_to_train)*200
 
@@ -199,8 +211,10 @@ def _main():
     classifier.eval()
     generator = Generator()
     discriminator = Discriminator(args.discriminator_norm)
-    # generator.load_state_dict(torch.load('./expc/expcG'))
-    # discriminator.load_state_dict(torch.load('./expc/expcD'))
+    # generator.load_state_dict(torch.load(
+    #     '/home/dcor/ronmokady/workshop21/team1/TryShalev/wgan-gp_models/wgan_with_true_comp_training_pass_dynamic_factor_loss2/models_checkpoint/wgan_with_true_comp_training_pass_dynamic_factor_loss2G_3'))
+    # discriminator.load_state_dict(torch.load(
+    #     '/home/dcor/ronmokady/workshop21/team1/TryShalev/wgan-gp_models/wgan_with_true_comp_training_pass_dynamic_factor_loss2/models_checkpoint/wgan_with_true_comp_training_pass_dynamic_factor_loss2D_3'))
     classifier.to(device)
     generator.to(device)
     discriminator.to(device)
@@ -282,6 +296,8 @@ def _main():
                 torch.save(discriminator.state_dict(), models_dir + '/' + args.model_name + 'D')
                 for i in range(1,len(fixed_features)-1):
                     one_feature = isolate_layer(fixed_features, i, device)
+                    #new_fixed_masks = [torch.ones(features[x].shape, device=device) for x in range(len(features))]
+                    #setMasks(new_fixed_masks, device, i)
                     fake_images = sample(generator, z, one_feature, fixed_masks)
                     grid = vutils.make_grid(fake_images, padding=2, normalize=True, nrow=8)
                     vutils.save_image(grid, os.path.join(temp_results_dir, 'res_iter_{}_layer_{}.jpg'.format(iterations // 2000, i)))
