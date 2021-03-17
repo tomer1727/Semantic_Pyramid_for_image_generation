@@ -7,6 +7,7 @@ import torch.optim as optim
 import torch.utils.data
 import torchvision.datasets as dset
 import torchvision.transforms as transforms
+from torchvision.utils import save_image
 import torch.nn as nn
 import argparse
 import numpy as np
@@ -77,7 +78,7 @@ def _main():
     classifier = torch.load('./classifier')
     classifier.eval()
     generator = Generator()
-    generator.load_state_dict(torch.load('./sanityGD/sanityGD_200'))
+    generator.load_state_dict(torch.load('./firstTry/firstTry_300'))
     # generator.load_state_dict(torch.load('./tanh16/tanh16_200'))
 
     generator.eval()
@@ -96,18 +97,18 @@ def _main():
         features = features[1:5] # for now working with res blocks only
         outputs_images = generator(noise, features)  # forward pass
         image_to_show = outputs_images[0]
-        image_to_show = image_to_show.detach().cpu()
+        # image_to_show = image_to_show.detach().cpu()
         # print_images_with_output(images[0].detach().cpu().numpy(), image_to_show.numpy(), 'hi')
-        tensor_to_pil = transforms.ToPILImage()
         in_image = Image.open(paths[0])
         in_image = loader(in_image)
-        image_to_save = tensor_to_pil(image_to_show)
+        # image_to_save = image_to_show
         in_image.save('./output_images2/in{}.jpg'.format(i))
-        image_to_save.save('./output_images2/out{}.jpg'.format(i))
+        save_image(image_to_show.detach().cpu(), './output_images2/out{}.jpg'.format(i), normalize=True)
+        # image_to_save.save('./output_images2/out{}.jpg'.format(i))
         i += 1
         if i == 10:
-            print(np.array(image_to_save))
-            print(image_to_show.numpy())
+            # print(np.array(image_to_save))
+            # print(image_to_show.numpy())
             return
 
 

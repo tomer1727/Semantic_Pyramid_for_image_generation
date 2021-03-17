@@ -9,7 +9,7 @@ class ConvTransposeBlock(nn.Module):
     """
     def __init__(self, channels, num_filters, filter_size, activation='relu', stride=1, padding=1):
         super(ConvTransposeBlock, self).__init__()
-        self.block = nn.Sequential(nn.ConvTranspose2d(channels, num_filters, kernel_size=filter_size, padding=padding, stride=stride),
+        self.block = nn.Sequential(nn.utils.spectral_norm(nn.ConvTranspose2d(channels, num_filters, kernel_size=filter_size, padding=padding, stride=stride)),
                                    nn.BatchNorm2d(num_filters),
                                    nn.ReLU(inplace=True) if activation == 'relu' else nn.Identity())
 
@@ -25,7 +25,7 @@ class ResidualBlock(nn.Module):
         self.conv_block1 = ConvTransposeBlock(in_channels, in_channels, 1, padding=0)
         self.conv_block2 = ConvTransposeBlock(in_channels, in_channels, 4, stride=2)
         self.conv_block3 = ConvTransposeBlock(in_channels, out_channels, 1, padding=0, activation='none')
-        self.skip_block = nn.Sequential(nn.ConvTranspose2d(in_channels=in_channels, out_channels=out_channels, kernel_size=2, stride=2, padding=0, bias=False),
+        self.skip_block = nn.Sequential(nn.utils.spectral_norm(nn.ConvTranspose2d(in_channels=in_channels, out_channels=out_channels, kernel_size=2, stride=2, padding=0, bias=False)),
                                         nn.BatchNorm2d(out_channels))
         self.activation = nn.ReLU()
 
@@ -95,12 +95,13 @@ class Generator(nn.Module):
         self.gen_block1 = GeneratorBlock(2048, 1024)
         self.gen_block2 = GeneratorBlock(1024, 512)
         self.gen_block3 = GeneratorBlock(512, 256)
-        self.attn1 = SelfAttentionLayer(in_dim=256)
+        # self.attn1 = SelfAttentionLayer(in_dim=256)
         self.gen_block4 = GeneratorBlock(256, 64)
-        self.last_conv = nn.ConvTranspose2d(64, 3, kernel_size=8, padding=3, stride=2)
-        # self.tanh = nn.Tanh()
+        self.last_conv = nn.utils.spectral_norm(nn.ConvTranspose2d(64, 3, kernel_size=8, padding=3, stride=2))
         self.conv_block1 = ConvTransposeBlock(3, 3, 3, stride=1, padding=1)
-        self.conv_block2 = ConvTransposeBlock(3, 3, 3, stride=1, padding=1)
+        self.conv2 = nn.utils.spectral_norm(nn.ConvTranspose2d(3, 3, kernel_size=3, padding=1, stride=1))
+        # self.conv_block2 = ConvTransposeBlock(3, 3, 3, stride=1, padding=1)
+        self.tanh = nn.Tanh()
 
     def forward(self, noise, features):
         # noise has dimension 2048 * 7 * 7 (TODO: check adding layer here)
@@ -110,7 +111,7 @@ class Generator(nn.Module):
         x, _ = self.attn1(x)
         x = self.gen_block4(x, features[0])
         x = self.last_conv(x)
-        # x = self.tanh(x)
         x = self.conv_block1(x)
-        x = self.conv_block2(x)
+        x = self.conv2(x)
+        x = self.tanh(x)
         return x

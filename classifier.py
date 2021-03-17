@@ -41,7 +41,7 @@ class Classifier(nn.Module):
         avgpool = self.avgpool(layer4)
         flat = self.flat(avgpool)
         outputs = self.fc(flat)
-        return outputs, (relu, layer1, layer2, layer3, layer4, avgpool)
+        return outputs, [relu, layer1, layer2, layer3, layer4, avgpool]
 
 
 def _main():
@@ -59,7 +59,7 @@ def _main():
     model.load_state_dict(state_dict)
 
     clf = Classifier(model)
-    torch.save(clf, r"C:\Users\tomer\OneDrive\Desktop\sadna\pyramid_project\classifier18")
+    # torch.save(clf, r"C:\Users\tomer\OneDrive\Desktop\sadna\pyramid_project\classifier18")
     # torch.save(clf, "./classifier")
     model.eval()
     clf.eval()
@@ -67,7 +67,7 @@ def _main():
     # load the image transformer
     centre_crop = transforms.Compose([
             transforms.Resize((256, 256)),
-            transforms.CenterCrop(224),
+            transforms.CenterCrop(256),
             transforms.ToTensor(),
             transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ])

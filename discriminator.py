@@ -9,7 +9,7 @@ class ConvBlock(nn.Module):
     """
     def __init__(self, channels, num_filters, filter_size, activation='relu', stride=1, padding=1):
         super(ConvBlock, self).__init__()
-        self.block = nn.Sequential(nn.Conv2d(channels, num_filters, kernel_size=filter_size, padding=padding, stride=stride),
+        self.block = nn.Sequential(nn.utils.spectral_norm(nn.Conv2d(channels, num_filters, kernel_size=filter_size, padding=padding, stride=stride)),
                                    nn.BatchNorm2d(num_filters),
                                    nn.LeakyReLU(0.2, inplace=True) if activation == 'relu' else nn.Identity())
 
@@ -25,7 +25,7 @@ class ResidualBlock(nn.Module):
         self.conv_block1 = ConvBlock(in_channels, in_channels, 1, padding=0)
         self.conv_block2 = ConvBlock(in_channels, in_channels, 3, stride=2)
         self.conv_block3 = ConvBlock(in_channels, out_channels, 1, padding=0, activation='none')
-        self.skip_block = nn.Sequential(nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=1, stride=2, padding=0, bias=False),
+        self.skip_block = nn.Sequential(nn.utils.spectral_norm(nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=1, stride=2, padding=0, bias=False)),
                                         nn.BatchNorm2d(out_channels))
         self.activation = nn.LeakyReLU(0.2, inplace=True)
 
@@ -80,15 +80,17 @@ class SelfAttentionLayer(nn.Module):
 class Discriminator(nn.Module):
     def __init__(self):
         super().__init__()
-        self.first_conv = nn.Conv2d(3, 64, kernel_size=7, padding=3, stride=2)
+        self.first_conv = nn.utils.spectral_norm(nn.Conv2d(3, 64, kernel_size=7, padding=3, stride=2))
         self.res_block1 = ResidualBlock(64, 256)
         self.attn1 = SelfAttentionLayer(in_dim=256)
         self.res_block2 = ResidualBlock(256, 512)
         self.res_block3 = ResidualBlock(512, 1024)
         self.res_block4 = ResidualBlock(1024, 2048)
-        self.avg_pool = nn.AdaptiveAvgPool2d(output_size=(1, 1))
-        self.flat = nn.Flatten()
-        self.fc = nn.Linear(in_features=2048, out_features=1)
+        self.conv1 = nn.utils.spectral_norm(nn.Conv2d(2048, 256, 3, stride=2, padding=1))
+        self.conv2 = nn.utils.spectral_norm(nn.Conv2d(256, 1, 4))
+        # self.avg_pool = nn.AdaptiveAvgPool2d(output_size=(1, 1))
+        # self.flat = nn.Flatten()
+        # self.fc = nn.Linear(in_features=2048, out_features=1)
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
@@ -98,8 +100,11 @@ class Discriminator(nn.Module):
         x = self.res_block2(x)
         x = self.res_block3(x)
         x = self.res_block4(x)
-        x = self.avg_pool(x)
-        x = self.flat(x)
-        x = self.fc(x)
+        # x = self.res_block5(x)
+        x = self.conv1(x)
+        x = self.conv2(x)
+        # x = self.avg_pool(x)
+        # x = self.flat(x)
+        # x = self.fc(x)
         x = self.sigmoid(x)
         return x
