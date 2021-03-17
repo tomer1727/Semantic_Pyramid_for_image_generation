@@ -10,7 +10,7 @@ import torch.nn as nn
 import argparse
 
 from classifier import Classifier
-from generator2 import Generator
+from generator import Generator
 
 
 class ImageFolderWithPaths(dset.ImageFolder):

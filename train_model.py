@@ -16,8 +16,8 @@ import torchvision.utils as vutils
 import math
 
 from classifier import Classifier
-from generator2 import Generator
-from discriminator2 import Discriminator
+from generator import Generator
+from discriminator import Discriminator
 
 real_label_D = 0.9
 real_label_G = 1.0
@@ -346,7 +346,7 @@ if __name__ == '__main__':
         exit(1)
     out_dir = './wgan-gp_models/' + args.model_name
     if not os.path.exists(out_dir):
-        os.mkdir(out_dir)
+        os.makedirs(out_dir, exist_ok=True)
     arg_dic = vars(args)
     with open(out_dir + '/hyperparams.txt', 'w') as file:
         for key in arg_dic:
