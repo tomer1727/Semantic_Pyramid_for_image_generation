@@ -6,8 +6,8 @@ We present a GAN based model that takes advantage of the ability of deep convolu
 The implementation process is: 
 An image is fed to a pre-trained classification network. It's features from different layers are extracted, and optionally manipulated according to the wanted application. The manipulated features are inserted to a GAN. Then, the generator creates synthetic images based on the manipulated features it has received. The user gets the ability to control the semantic level of features that is inserted to the generator.
 
-# train_model script:
- the main script, is used for model training. the following command line arguments are necessary in order to run:
+# Train_model script:
+ The main script, is used for model training. the following command line arguments are necessary in order to run:
  - model-name: the name of the current model (can be anything, for personal use).
  - classifier-path: the path to the classifier weights (the classifier network is included in this repository - classifier18 file).
  - train-path: the path to the train dataset.
