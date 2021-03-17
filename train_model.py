@@ -9,19 +9,14 @@ import torchvision.transforms as transforms
 import argparse
 import time
 import random
-import tensorboardX # run command on terminal: tensorboard --logdir=<your_log_dir>
+import tensorboardX
 import functools
-import numpy as np
 import torchvision.utils as vutils
 import math
 
 from classifier import Classifier
 from generator import Generator
 from discriminator import Discriminator
-
-real_label_D = 0.9
-real_label_G = 1.0
-fake_label = 0.1
 
 
 def print_gpu_details():
@@ -33,7 +28,14 @@ def print_gpu_details():
         print('Num of GPUs:', torch.cuda.device_count())
 
 
+################################################################
+# WGAN-GP Loss functions and helper methods
+################################################################
+
 def get_wgan_losses_fn():
+    """
+    get the wgan-gp loss functions (both for generator and discriminator)
+    """
     def d_loss_fn(r_logit, f_logit):
         r_loss = -r_logit.mean()
         f_loss = f_logit.mean()
@@ -73,6 +75,10 @@ def gradient_penalty(f, real, fake):
 
     return gp
 
+################################################################
+# Training and sampling methods
+################################################################
+
 
 def train_generator(generator, discriminator, generator_loss_fn, generator_optimizer, batch_size, features, criterion_features, features_to_train,
                     classifier, normalizer_clf, criterion_diversity_n, criterion_diversity_d, masks, train_type, epsilon=10e-4):
@@ -98,6 +104,7 @@ def train_generator(generator, discriminator, generator_loss_fn, generator_optim
     fake_images2 = generator(z2, features, masks)
     diversity_loss = criterion_diversity_n(z, z2) / (criterion_diversity_d(fake_images, fake_images2) + epsilon)
 
+    # total loss calculation and network updating
     total_loss = generator_loss + diversity_loss + features_loss
     generator.zero_grad()
     total_loss.backward()
@@ -115,6 +122,7 @@ def train_discriminator(generator, discriminator, discriminator_loss_fn, discrim
     z = torch.randn(real_images.shape[0], 128, 1, 1).to(device)
     fake_images = generator(z, features, masks).detach()
 
+    # wgan-gp loss
     real_images_d_logit = discriminator(real_images)
     fake_images_d_logit = discriminator(fake_images)
 
@@ -123,6 +131,7 @@ def train_discriminator(generator, discriminator, discriminator_loss_fn, discrim
 
     discriminator_loss = (real_images_d_loss + fake_images_d_loss) + gp * args.gradient_penalty_weight
 
+    # network updating
     discriminator.zero_grad()
     discriminator_loss.backward()
     discriminator_optimizer.step()
@@ -131,29 +140,45 @@ def train_discriminator(generator, discriminator, discriminator_loss_fn, discrim
 
 
 def sample(generator, z, features, masks):
+    """
+    generate a batch of images from the given (Z, F, M)
+    """
     with torch.no_grad():
         generator.eval()
         return generator(z, features, masks)
 
 
 def isolate_layer(fixed_features, selected_layer, device):
+    """
+    keep only the selected layer and zero the rest layers
+    """
     res = [torch.clone(fixed_features[x]) for x in range(len(fixed_features))]
     for i in range(len(fixed_features)):
         if i != selected_layer:
             res[i] = torch.zeros(res[i].shape, device=device)
     return res
 
+################################################################
+# Masks handling methods
+################################################################
+
 
 def setCroppedMask(random_crop, mask, window_len1=0.45, window_len2=0.45, window_data=0):
+    """
+    Calculate window size and mask init accordingly
+    """
     x_start = math.floor((random_crop[0]/100) * mask.shape[2])
     y_start = math.floor((random_crop[1]/100) * mask.shape[3])
     x_end = x_start + math.floor(window_len1 * mask.shape[2])
     y_end = y_start + math.floor(window_len2 * mask.shape[3])
-    mask[:,:, x_start:x_end, y_start:y_end] = window_data
+    mask[:, :, x_start:x_end, y_start:y_end] = window_data
     return mask
 
 
 def setMasksPart1(masks, device, random_layer_idx):
+    """
+    Set masks suits to train type 1
+    """
     for idx, mask in enumerate(masks):
         if idx == random_layer_idx:
             # Pass the whole feature layer
@@ -164,6 +189,9 @@ def setMasksPart1(masks, device, random_layer_idx):
 
 
 def setMasksPart2(masks, device, random_layer_idx):
+    """
+    Set masks suits to train type 1
+    """
     random_crop = (random.randint(20, 40), random.randint(20, 40)) # randomize the percentage of mask indexes
     masks[random_layer_idx] = torch.ones(masks[random_layer_idx].shape, device=device)
     for idx, mask in enumerate(masks):
@@ -176,6 +204,9 @@ def setMasksPart2(masks, device, random_layer_idx):
 
 
 def getLossByTrainType(features, masks, train_type, features_to_train, outputs_images_features, criterion_features):
+    """
+    Calculate the features loss according to the train type
+    """
     if train_type == 1:
         loss_features = criterion_features(features[features_to_train], outputs_images_features[features_to_train])
     else:
@@ -209,19 +240,24 @@ def _main():
     print('set data loader')
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=args.batch_size, shuffle=True, num_workers=4, pin_memory=True, drop_last=True)
 
-    classifier = torch.load("/home/dcor/ronmokady/workshop21/team1/try/classifier18")
+    # Network creation
+    classifier = torch.load(args.classifier_path)
     classifier.eval()
     generator = Generator(gen_type=args.gen_type)
     discriminator = Discriminator(args.discriminator_norm, dis_type=args.gen_type)
-    # generator.load_state_dict(torch.load('./expc/expcG'))
-    # discriminator.load_state_dict(torch.load('./expc/expcD'))
+    # init weights
+    if args.generator_path is not None:
+        generator.load_state_dict(torch.load(args.generator_path))
+    else:
+        generator.init_weights()
+    if args.discriminator_path is not None:
+        discriminator.load_state_dict(torch.load(args.discriminator_path))
+    else:
+        discriminator.init_weights()
+
     classifier.to(device)
     generator.to(device)
     discriminator.to(device)
-
-    # weights init
-    generator.init_weights()
-    discriminator.init_weights()
 
     # losses + optimizers
     criterion_discriminator, criterion_generator = get_wgan_losses_fn()
@@ -235,6 +271,7 @@ def _main():
 
     starting_time = time.time()
     iterations = 0
+    # creating dirs for keeping models checkpoint, temp created images, and loss summary
     outputs_dir = os.path.join('wgan-gp_models', args.model_name)
     if not os.path.isdir(outputs_dir):
         os.makedirs(outputs_dir, exist_ok=True)
@@ -245,6 +282,7 @@ def _main():
     if not os.path.isdir(models_dir):
         os.mkdir(models_dir)
     writer = tensorboardX.SummaryWriter(os.path.join(outputs_dir, 'summaries'))
+
     z = torch.randn(args.batch_size, 128, 1, 1).to(device)  # a fixed noise for sampling
     z2 = torch.randn(args.batch_size, 128, 1, 1).to(device)  # a fixed noise for diversity sampling
     fixed_features = 0
@@ -254,7 +292,7 @@ def _main():
     print("Starting Training Loop...")
     for epoch in range(num_of_epochs):
         for data in train_loader:
-            train_type = random.choices([1, 2], [args.train1_prob, 1-args.train1_prob])
+            train_type = random.choices([1, 2], [args.train1_prob, 1-args.train1_prob]) # choose train type
             iterations += 1
             if iterations % 30 == 1:
                 print('epoch:', epoch, ', iter', iterations, 'start, time =', time.time() - starting_time, 'seconds')
@@ -264,7 +302,7 @@ def _main():
             images_discriminator = normalizer_discriminator(images)
             images_clf = normalizer_clf(images)
             _, features = classifier(images_clf)
-            if first_iter:
+            if first_iter: # save batch of images to keep track of the model process
                 first_iter = False
                 fixed_features = [torch.clone(features[x]) for x in range(len(features))]
                 fixed_masks = [torch.ones(features[x].shape, device=device) for x in range(len(features))]
@@ -281,6 +319,7 @@ def _main():
                 vutils.save_image(grid, os.path.join(temp_results_dir, 'original_images_diversity.jpg'))
             # Select a features layer to train on
             features_to_train = random.randint(1, len(features) - 2)
+            # Set masks
             masks = [features[i].clone() for i in range(len(features))]
             setMasksPart1(masks, device, features_to_train) if train_type == 1 else setMasksPart2(masks, device, features_to_train)
             discriminator_loss_dict = train_discriminator(generator, discriminator, criterion_discriminator, discriminator_optimizer, images_discriminator, features, masks)
@@ -298,33 +337,37 @@ def _main():
                     if iterations % 30 == 1:
                         print('{}: {:.6f}'.format(k, v))
 
-            if iterations < 10000 and iterations % 1000 == 1 or iterations % 2000 == 1:
-                torch.save(generator.state_dict(),  models_dir + '/' + args.model_name + 'G')
+            # Save generator and discriminator weights every 1000 iterations
+            if iterations % 1000 == 1:
+                torch.save(generator.state_dict(), models_dir + '/' + args.model_name + 'G')
                 torch.save(discriminator.state_dict(), models_dir + '/' + args.model_name + 'D')
-                # regular sampling (batch of different images)
-                first_features = True
-                fake_images = None
-                fake_images_diversity = None
-                for i in range(1, 5):
-                    one_layer_mask = isolate_layer(fixed_masks, i, device)
-                    if first_features:
-                        first_features = False
-                        fake_images = sample(generator, z, fixed_features, one_layer_mask)
-                        fake_images_diversity = sample(generator, z, fixed_features_diversity, one_layer_mask)
-                    else:
-                        tmp_fake_images = sample(generator, z, fixed_features, one_layer_mask)
-                        fake_images = torch.vstack((fake_images, tmp_fake_images))
-                        tmp_fake_images = sample(generator, z2, fixed_features_diversity, one_layer_mask)
-                        fake_images_diversity = torch.vstack((fake_images_diversity, tmp_fake_images))
-                grid = vutils.make_grid(fake_images, padding=2, normalize=True, nrow=8)
-                vutils.save_image(grid, os.path.join(temp_results_dir, 'res_iter_{}.jpg'.format(iterations // 1000)))
-                # diversity sampling (8 different images each with 8 different noises)
-                grid = vutils.make_grid(fake_images_diversity, padding=2, normalize=True, nrow=8)
-                vutils.save_image(grid, os.path.join(temp_results_dir, 'div_iter_{}.jpg'.format(iterations // 1000)))
+            # Save temp results
+            if args.keep_temp_results:
+                if iterations < 10000 and iterations % 1000 == 1 or iterations % 2000 == 1:
+                    # regular sampling (batch of different images)
+                    first_features = True
+                    fake_images = None
+                    fake_images_diversity = None
+                    for i in range(1, 5):
+                        one_layer_mask = isolate_layer(fixed_masks, i, device)
+                        if first_features:
+                            first_features = False
+                            fake_images = sample(generator, z, fixed_features, one_layer_mask)
+                            fake_images_diversity = sample(generator, z, fixed_features_diversity, one_layer_mask)
+                        else:
+                            tmp_fake_images = sample(generator, z, fixed_features, one_layer_mask)
+                            fake_images = torch.vstack((fake_images, tmp_fake_images))
+                            tmp_fake_images = sample(generator, z2, fixed_features_diversity, one_layer_mask)
+                            fake_images_diversity = torch.vstack((fake_images_diversity, tmp_fake_images))
+                    grid = vutils.make_grid(fake_images, padding=2, normalize=True, nrow=8)
+                    vutils.save_image(grid, os.path.join(temp_results_dir, 'res_iter_{}.jpg'.format(iterations // 1000)))
+                    # diversity sampling (8 different images each with few different noises)
+                    grid = vutils.make_grid(fake_images_diversity, padding=2, normalize=True, nrow=8)
+                    vutils.save_image(grid, os.path.join(temp_results_dir, 'div_iter_{}.jpg'.format(iterations // 1000)))
 
-            if iterations % 20000 == 1:
-                torch.save(generator.state_dict(), models_dir + '/' + args.model_name + 'G_' + str(iterations // 15000))
-                torch.save(discriminator.state_dict(), models_dir + '/' + args.model_name + 'D_' + str(iterations // 15000))
+                if iterations % 20000 == 1:
+                    torch.save(generator.state_dict(), models_dir + '/' + args.model_name + 'G_' + str(iterations // 15000))
+                    torch.save(discriminator.state_dict(), models_dir + '/' + args.model_name + 'D_' + str(iterations // 15000))
 
 
 if __name__ == '__main__':
@@ -338,7 +381,11 @@ if __name__ == '__main__':
     parser.add_argument('--discriminator-steps', type=int, default=5)
     parser.add_argument('--gen-type', default='default', choices=['default', 'res'])
     parser.add_argument('--train-path', default='/home/dcor/datasets/places365')
+    parser.add_argument('--classifier-path', default='/home/dcor/ronmokady/workshop21/team1/try/classifier18')
+    parser.add_argument('--generator-path', help='None for random init, if path is given the generator initialize to the given model')
+    parser.add_argument('--discriminator-path', help='None for random init, if path is given the discriminator initialize to the given model')
     parser.add_argument('--train1-prob', default=0.6, type=float)
+    parser.add_argument('--keep-temp-results', action='store_true')
     args = parser.parse_args()
     print(args)
     if args.model_name is None:
