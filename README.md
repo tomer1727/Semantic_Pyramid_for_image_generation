@@ -24,3 +24,18 @@ An image is fed to a pre-trained classification network. It's features from diff
  - discriminator-path: if path is given the discriminator initialize to the given model in this path
  - train1-prob: probability for choosing type 1 training procedure [0.6]
  - keep-temp-results: set this active for keeping temporary output images from the training procedure.
+
+for example: 
+``` python3 train_model.py [-h] [--batch-size BATCH_SIZE] [--lr LR]
+                              [--epochs EPOCHS] [--model-name MODEL_NAME]
+                              [--discriminator-norm {batch_norm,instance_norm,layer_norm}]
+                              [--gradient-penalty-weight GRADIENT_PENALTY_WEIGHT]
+                              [--discriminator-steps DISCRIMINATOR_STEPS]
+                              [--gen-type {default,res}]
+                              [--train-path TRAIN_PATH]
+                              [--classifier-path CLASSIFIER_PATH]
+                              [--generator-path GENERATOR_PATH]
+                              [--discriminator-path DISCRIMINATOR_PATH]
+                              [--train1-prob TRAIN1_PROB]
+                              [--keep-temp-results]
+ ```
