@@ -111,14 +111,14 @@ class Generator(nn.Module):
             self.last_conv = nn.Conv2d(64, 3, kernel_size=3, stride=1, padding=1)
         self.tanh = nn.Tanh()
 
-    def forward(self, noise, features):
+    def forward(self, noise, features, masks):
         # noise has dimension 128 * 1 * 1
         x = self.conv_block1(noise)
         x = self.conv_block2(x)
-        x = self.conv_block3(x, features[4])
-        x = self.conv_block4(x, features[3])
-        x = self.conv_block5(x, features[2])
-        x = self.conv_block6(x, features[1])
+        x = self.conv_block3(x, features[4] * masks[4])
+        x = self.conv_block4(x, features[3] * masks[3])
+        x = self.conv_block5(x, features[2] * masks[2])
+        x = self.conv_block6(x, features[1] * masks[1])
         if self.gen_type == 'res':
             x = self.conv_block7(x)
         x = self.last_conv(x)
