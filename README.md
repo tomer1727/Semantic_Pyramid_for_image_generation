@@ -25,7 +25,7 @@ An image is fed to a pre-trained classification network. It's features from diff
  - train1-prob: probability for choosing type 1 training procedure [0.6]
  - keep-temp-results: set this active for keeping temporary output images from the training procedure.
 
-for example: 
+For example: 
 ``` python3 train_model.py [-h] [--batch-size BATCH_SIZE] [--lr LR]
                               [--epochs EPOCHS] [--model-name MODEL_NAME]
                               [--discriminator-norm {batch_norm,instance_norm,layer_norm}]
