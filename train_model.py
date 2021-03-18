@@ -107,6 +107,8 @@ def train_generator(generator, discriminator, generator_loss_fn, generator_optim
         fake_images2 = generator(z2, features, masks)
         diversity_loss = criterion_diversity_n(z, z2) / (criterion_diversity_d(fake_images, fake_images2) + epsilon)
         total_loss = total_loss + diversity_loss
+    else:
+        diversity_loss = criterion_diversity_n(z, z)
 
     # total loss calculation and network updating
     generator.zero_grad()
