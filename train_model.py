@@ -99,13 +99,16 @@ def train_generator(generator, discriminator, generator_loss_fn, generator_optim
     _, fake_features = classifier(fake_images_clf)
     features_loss = getLossByTrainType(features, masks, train_type, features_to_train, fake_features, criterion_features)
 
+    total_loss = generator_loss + features_loss
+
     # diversity loss
-    z2 = torch.randn(batch_size, 128, 1, 1, device=device)
-    fake_images2 = generator(z2, features, masks)
-    diversity_loss = criterion_diversity_n(z, z2) / (criterion_diversity_d(fake_images, fake_images2) + epsilon)
+    if args.use_diversity_loss:
+        z2 = torch.randn(batch_size, 128, 1, 1, device=device)
+        fake_images2 = generator(z2, features, masks)
+        diversity_loss = criterion_diversity_n(z, z2) / (criterion_diversity_d(fake_images, fake_images2) + epsilon)
+        total_loss = total_loss + diversity_loss
 
     # total loss calculation and network updating
-    total_loss = generator_loss + diversity_loss + features_loss
     generator.zero_grad()
     total_loss.backward()
     generator_optimizer.step()
@@ -318,7 +321,7 @@ def _main():
                 grid = vutils.make_grid(orig_images_diversity, padding=2, normalize=True, nrow=8)
                 vutils.save_image(grid, os.path.join(temp_results_dir, 'original_images_diversity.jpg'))
             # Select a features layer to train on
-            features_to_train = random.randint(1, len(features) - 2)
+            features_to_train = random.randint(1, len(features) - 2) if args.fixed_layer is None else args.fixed_layer
             # Set masks
             masks = [features[i].clone() for i in range(len(features))]
             setMasksPart1(masks, device, features_to_train) if train_type == 1 else setMasksPart2(masks, device, features_to_train)
@@ -372,20 +375,22 @@ def _main():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('choose hyperparameters')
-    parser.add_argument('--batch-size', default=64, type=int)
+    parser.add_argument('--batch-size', default=16, type=int)
     parser.add_argument('--lr', default=0.0002, type=float)
-    parser.add_argument('--epochs', default=500, type=int)
+    parser.add_argument('--epochs', default=100, type=int)
     parser.add_argument('--model-name')
     parser.add_argument('--discriminator-norm', default='instance_norm', choices=['batch_norm', 'instance_norm', 'layer_norm'])
     parser.add_argument('--gradient-penalty-weight', type=float, default=10.0)
     parser.add_argument('--discriminator-steps', type=int, default=5)
-    parser.add_argument('--gen-type', default='default', choices=['default', 'res'])
+    parser.add_argument('--gen-type', default='res', choices=['default', 'res'])
     parser.add_argument('--train-path', default='/home/dcor/datasets/places365')
     parser.add_argument('--classifier-path', default='/home/dcor/ronmokady/workshop21/team1/try/classifier18')
     parser.add_argument('--generator-path', help='None for random init, if path is given the generator initialize to the given model')
     parser.add_argument('--discriminator-path', help='None for random init, if path is given the discriminator initialize to the given model')
-    parser.add_argument('--train1-prob', default=0.6, type=float)
+    parser.add_argument('--train1-prob', default=0.6, type=float, help='use value of 1 in order of use only train type 1 (no masks)')
+    parser.add_argument('--fixed-layer', type=int, help='train only this layer')
     parser.add_argument('--keep-temp-results', action='store_true')
+    parser.add_argument('--use-diversity-loss', action='store_true')
     args = parser.parse_args()
     print(args)
     if args.model_name is None:
