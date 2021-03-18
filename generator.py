@@ -37,17 +37,19 @@ class ConvBlock(nn.Module):
 
 
 class ResidualBlock(nn.Module):
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, out_channels, need_upsample=True):
         super().__init__()
-        self.in_channels, self.out_channels = in_channels, out_channels
-        self.upsample = nn.UpsamplingNearest2d(scale_factor=2)
+        self.in_channels, self.out_channels, self.need_upsample = in_channels, out_channels, need_upsample
+        if need_upsample:
+            self.upsample = nn.UpsamplingNearest2d(scale_factor=2)
         self.conv_block1 = ConvBlock(in_channels, out_channels, 3, conv_type='conv')
         self.conv_block2 = ConvBlock(out_channels, out_channels, 3, conv_type='conv', activation='none')
         self.skip_block = ConvBlock(in_channels, out_channels, 1, stride=1, padding=0, conv_type='conv', activation='none')
         self.activation = nn.ReLU()
 
     def forward(self, x):
-        x = self.upsample(x)
+        if self.need_upsample:
+            x = self.upsample(x)
         residual = self.skip_block(x)
         x = self.conv_block1(x)
         x = self.conv_block2(x)
