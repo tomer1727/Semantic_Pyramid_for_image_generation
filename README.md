@@ -62,9 +62,23 @@ Optional arguments {choises} [deafult values]:
 - num-of-noises: how many noise vectors to use per image [4] 
 - gen-type: the type of the pre-trained generator {default, res} [res]
 
+for example:
+```
+python3 eval_model.py [-h] --full-model-name FULL_MODEL_NAME
+                           --eval-path EVAL_PATH 
+                           [--batch-size BATCH_SIZE]
+                           [--num-of-samples NUM_OF_SAMPLES]
+                           [--num-of-noises NUM_OF_NOISES] 
+                           --output-path OUTPUT_PATH 
+                           [--gen-type {default,res}]
+                           [--classifier-path CLASSIFIER_PATH]
+```
+
 An example for one output grid of the script (for layer 3, batch size of 3 and 3 noises):
+
 ![image](https://user-images.githubusercontent.com/62801710/111813005-58934e00-88e1-11eb-9ce3-49eb5725be10.png)
 with the followin origin output:
+
 ![image](https://user-images.githubusercontent.com/62801710/111813103-71036880-88e1-11eb-9795-1eb40b5bbd61.png)
 
  
