@@ -22,13 +22,17 @@ An image is fed to a pre-trained classification network. It's features from diff
  - gen-type: generator block type, default for one convolutinal layer in each block, res for residual block {default, res} [res]
  - generator-path: if path is given the generator initialize to the given model in this path
  - discriminator-path: if path is given the discriminator initialize to the given model in this path
- - train1-prob: probability for choosing type 1 training procedure [0.6]
+ - train1-prob: probability for choosing type 1 training procedure (choose 1 in order to use only type 1 trainig procedure) [0.6]
+ - fixed-layer: used to train the model using only this layer
  - keep-temp-results: set this active for keeping temporary output images from the training procedure.
+ - use-diversity-loss: set this active in order to use diversity loss as well
 
 For example: 
 ``` 
-python3 train_model.py [-h] [--batch-size BATCH_SIZE] [--lr LR]
-                              [--epochs EPOCHS] [--model-name MODEL_NAME]
+python3 train_model.py  [-h]  [--batch-size BATCH_SIZE]
+                              [--lr LR]
+                              [--epochs EPOCHS] 
+                              [--model-name MODEL_NAME]
                               [--discriminator-norm {batch_norm,instance_norm,layer_norm}]
                               [--gradient-penalty-weight GRADIENT_PENALTY_WEIGHT]
                               [--discriminator-steps DISCRIMINATOR_STEPS]
@@ -38,5 +42,19 @@ python3 train_model.py [-h] [--batch-size BATCH_SIZE] [--lr LR]
                               [--generator-path GENERATOR_PATH]
                               [--discriminator-path DISCRIMINATOR_PATH]
                               [--train1-prob TRAIN1_PROB]
-                              [--keep-temp-results]
+                              [--fixed-layer FIXED_LAYER ]
+                              [--keep-temp-results] 
+                              [--use-diversity-loss]
+
  ```
+ 
+ # Examples:
+ Some examples of images created by our model:
+- Images that has been created by passing only layer 3 features:
+![image](https://user-images.githubusercontent.com/62801710/111793436-f11fd300-88cd-11eb-88d5-ca5beedb1020.png)
+- Examples for colorizing black and white images by passing features from layer 1 and 2:
+![image](https://user-images.githubusercontent.com/62801710/111793694-2debca00-88ce-11eb-828f-8ad4945ecf84.png)
+- Examples for our masking system, keeping more details about small part of the image while modifing the rest:
+![image](https://user-images.githubusercontent.com/62801710/111793859-58d61e00-88ce-11eb-8aec-1b589e9b2c7a.png)
+
+
