@@ -100,6 +100,7 @@ def train_generator(generator, discriminator, generator_loss_fn, generator_optim
     features_loss = getLossByTrainType(features, masks, train_type, features_to_train, fake_features, criterion_features)
 
     total_loss = generator_loss + features_loss
+    loses_dictionary = {'g_loss': generator_loss, 'features_loss': features_loss, 'total_loss': total_loss}
 
     # diversity loss
     if args.use_diversity_loss:
@@ -107,15 +108,15 @@ def train_generator(generator, discriminator, generator_loss_fn, generator_optim
         fake_images2 = generator(z2, features, masks)
         diversity_loss = criterion_diversity_n(z, z2) / (criterion_diversity_d(fake_images, fake_images2) + epsilon)
         total_loss = total_loss + diversity_loss
-    else:
-        diversity_loss = criterion_diversity_n(z, z)
+        loses_dictionary['diversity loss'] = diversity_loss
+        loses_dictionary['total loss'] = total_loss
 
     # total loss calculation and network updating
     generator.zero_grad()
     total_loss.backward()
     generator_optimizer.step()
 
-    return {'g_loss': generator_loss, 'features_loss': features_loss, 'diversity loss': diversity_loss, 'total_loss': total_loss}
+    return loses_dictionary
 
 
 def train_discriminator(generator, discriminator, discriminator_loss_fn, discriminator_optimizer, real_images, features, masks):
