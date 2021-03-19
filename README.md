@@ -51,6 +51,7 @@ python3 train_model.py  [-h]  [--batch-size BATCH_SIZE]
  # Examples:
  Some examples of images created by our model:
 - Images that has been created by passing only layer 3 features:
+
 ![image](https://user-images.githubusercontent.com/62801710/111793436-f11fd300-88cd-11eb-88d5-ca5beedb1020.png)
 - Examples for colorizing black and white images by passing features from layer 1 and 2:
 ![image](https://user-images.githubusercontent.com/62801710/111793694-2debca00-88ce-11eb-828f-8ad4945ecf84.png)
