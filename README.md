@@ -22,7 +22,7 @@ An image is fed to a pre-trained classification network. It's features from diff
  - gen-type: generator block type, default for one convolutinal layer in each block, res for residual block {default, res} [res]
  - generator-path: if path is given the generator initialize to the given model in this path
  - discriminator-path: if path is given the discriminator initialize to the given model in this path
- - train1-prob: probability for choosing type 1 training procedure (choose 1 in order to use only type 1 trainig procedure) [0.6]
+ - train1-prob: probability for choosing type 1 training procedure (choose 1 in order to use only type 1 training procedure) [0.6]
  - fixed-layer: used to train the model using only this layer
  - keep-temp-results: set this active for keeping temporary output images from the training procedure.
  - use-diversity-loss: set this active in order to use diversity loss as well
@@ -47,6 +47,26 @@ python3 train_model.py  [-h]  [--batch-size BATCH_SIZE]
                               [--use-diversity-loss]
 
  ```
+ 
+ # eval_model script
+ 
+ The main testing script. with this script images can be created using pre-trained model. the script repeat the following process: save one batch of images, and create images based on one layer of features at a time. For each layer use several noises (argument) and save grid of output images The number of samples like this is an argument for the script.
+necessary running arguments: 
+- full-model-name: the full path to the pre-tained model
+- eval-path: the path to the dataset where the images are sampled from
+- classifier-path: the path to the classifier
+- output-path: where to save the outputs
+Optional arguments {choises} [deafult values]:
+- batch-size [8]
+- num-of-samples: how many batches to use [5]
+- num-of-noises: how many noise vectors to use per image [4] 
+- gen-type: the type of the pre-trained generator {default, res} [res]
+
+An example for one output grid of the script (for layer 3, batch size of 3 and 3 noises):
+![image](https://user-images.githubusercontent.com/62801710/111813005-58934e00-88e1-11eb-9ce3-49eb5725be10.png)
+with the followin origin output:
+![image](https://user-images.githubusercontent.com/62801710/111813103-71036880-88e1-11eb-9795-1eb40b5bbd61.png)
+
  
  # Examples:
  Some examples of images created by our model:
