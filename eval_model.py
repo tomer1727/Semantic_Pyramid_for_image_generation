@@ -7,6 +7,7 @@ import torchvision.transforms as transforms
 import argparse
 import torchvision.utils as vutils
 
+from classifier import Classifier
 from generator import Generator
 
 
@@ -78,24 +79,25 @@ def _main():
                 with torch.no_grad():
                     generator.eval()
                     if output_images is None:
-                        output_images = generator(z, features, masks)
+                        output_images = generator(z, one_level_features, masks)
                     else:
-                        tmp_images = generator(z, features, masks)
+                        tmp_images = generator(z, one_level_features, masks)
                         output_images = torch.vstack((output_images, tmp_images))
             grid = vutils.make_grid(output_images, padding=2, normalize=True, nrow=8)
             vutils.save_image(grid, os.path.join(output_images_dir, 'sample_{}_f{}.jpg'.format(sample_num, features_level)))
-            sample_num += 1
-            if sample_num == args.num_of_samples:
-                print("done")
-                break
+        sample_num += 1
+        if sample_num == args.num_of_samples + 1:
+            print("done")
+            break
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('choose hyperparameters')
     parser.add_argument('--full-model-name', required=True)
     parser.add_argument('--eval-path', required=True)
-    parser.add_argument('--batch-size', default=16, type=int)
+    parser.add_argument('--batch-size', default=8, type=int)
     parser.add_argument('--num-of-samples', default=5, type=int)
+    parser.add_argument('--num-of-noises', default=4, type=int)
     parser.add_argument('--output-path', required=True)
     parser.add_argument('--gen-type', default='res', choices=['default', 'res'])
     parser.add_argument('--classifier-path', default='/home/dcor/ronmokady/workshop21/team1/try/classifier18')
