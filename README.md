@@ -77,7 +77,8 @@ python3 eval_model.py [-h] --full-model-name FULL_MODEL_NAME
 An example for one output grid of the script (for layer 3, batch size of 3 and 3 noises):
 
 ![image](https://user-images.githubusercontent.com/62801710/111813005-58934e00-88e1-11eb-9ce3-49eb5725be10.png)
-with the followin origin output:
+
+with the followin origin images:
 
 ![image](https://user-images.githubusercontent.com/62801710/111813103-71036880-88e1-11eb-9795-1eb40b5bbd61.png)
 
