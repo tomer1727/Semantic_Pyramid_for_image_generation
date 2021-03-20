@@ -85,7 +85,7 @@ with the followin origin images:
  # train_feature_creation_gen.py
  
  This script used to train our features creation model (in this model each generator block is separate to different network and responsible of creating the next level features).
- This script use to train one block {f2 to f1, f3 to f2, f4 to f3} and it's needed pre trained f1 to image network (example is given in the pre trained generator directory) and the rest of the higher blocks (for example to train f3 to f2, pre trained f2 to f1 is needed). The location of the pre trained blocks will be given as argument.
+ This script use to train one block {f2 to f1, f3 to f2, f4 to f3} and it's needed pre trained f1 to image network (example is given in the pre trained generators directory) and the rest of the higher blocks (for example to train f3 to f2, pre trained f2 to f1 is needed). The location of the pre trained blocks will be given as argument.
  The arguments are mostly the same as train_model.py except two more necessary arguments:
 - features-gens-dir-path: the location of the pre trained generators
 - train-block-input: The block to train (train each block separetly, choose the block by its input layer number)
