@@ -50,7 +50,7 @@ python3 train_model.py  [-h]  [--batch-size BATCH_SIZE]
  
  # eval_model script
  
- The main testing script. with this script images can be created using pre-trained model. the script repeat the following process: save one batch of images, and create images based on one layer of features at a time. For each layer use several noises (argument) and save grid of output images The number of samples like this is an argument for the script.
+ The main testing script. with this script images can be created using pre-trained model. the script repeat the following process: save one batch of images, and create images based on one layer of features at a time. For each layer use several noises (argument) and save grid of output images. The number of samples like this is an argument for the script. Notice that this script will create output images generates from all layer (one at a time) even if the generator was trained with fixed layer (in this case only these featerues will create relevant output).
 necessary running arguments: 
 - full-model-name: the full path to the pre-tained model
 - eval-path: the path to the dataset where the images are sampled from
