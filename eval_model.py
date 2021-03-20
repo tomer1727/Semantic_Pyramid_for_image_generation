@@ -31,7 +31,7 @@ def _main():
     device = torch.device("cuda:0" if (torch.cuda.is_available()) else "cpu")
 
     generator = Generator(gen_type=args.gen_type)
-    generator.load_state_dict(torch.load(args.full_model_name))
+    generator.load_state_dict(torch.load(args.generator_path))
     generator.eval()
     generator.to(device)
 
@@ -55,7 +55,7 @@ def _main():
     print('set data loader')
     eval_loader = torch.utils.data.DataLoader(eval_set, batch_size=args.batch_size, shuffle=True, num_workers=4, pin_memory=True, drop_last=True)
 
-    output_images_dir = os.path.join(args.output_path, args.full_model_name.split('/')[-1])
+    output_images_dir = os.path.join(args.output_path, args.generator_path.split('/')[-1])
     if not os.path.isdir(output_images_dir):
         os.makedirs(output_images_dir, exist_ok=True)
     print("Starting Eval Loop...")
@@ -93,7 +93,7 @@ def _main():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('choose hyperparameters')
-    parser.add_argument('--full-model-name', required=True)
+    parser.add_argument('--generator-path', required=True)
     parser.add_argument('--eval-path', required=True)
     parser.add_argument('--batch-size', default=8, type=int)
     parser.add_argument('--num-of-samples', default=5, type=int)
