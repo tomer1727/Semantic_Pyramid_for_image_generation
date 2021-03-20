@@ -7,14 +7,14 @@ class Features1ToImage(nn.Module):
     def __init__(self):
         super().__init__()
         # 64x64 -> 128x128
-        self.conv_block6 = GeneratorBlock(64, 64, 'res')
+        self.conv_block6 = GeneratorBlock(64, 64, 'res', with_features=False)
         # 128x128 -> 256x256
         self.conv_block7 = ResidualBlock(64, 64)
         self.last_conv = nn.Conv2d(64, 3, kernel_size=3, stride=1, padding=1)
         self.tanh = nn.Tanh()
 
     def forward(self, features1):
-        x = self.conv_block6(features1)
+        x = self.conv_block6(features1, None)
         x = self.conv_block7(x)
         x = self.last_conv(x)
         x = self.tanh(x)
@@ -53,10 +53,10 @@ class FeaturesDiscriminator(nn.Module):
         super().__init__()
         self.dis_type = dis_type
         self.dis_level = dis_level
-        if dis_type == 1:
+        if dis_level == 1:
             # 64x64 -> 32x32
             self.conv_block2 = DiscriminatorBlock(64, 128, dis_type=dis_type, norm=norm)
-        if dis_type > 3:
+        if dis_level < 3:
             # 32x32 -> 16x16
             self.conv_block3 = DiscriminatorBlock(128, 256, dis_type=dis_type, norm=norm)
         # 16x16 -> 8x8
@@ -67,9 +67,9 @@ class FeaturesDiscriminator(nn.Module):
         self.last_conv = nn.Conv2d(512, 1, 4, stride=1, padding=0)
 
     def forward(self, x):
-        if self.dis_type == 1:
+        if self.dis_level == 1:
             x = self.conv_block2(x)
-        if self.dis_type > 3:
+        if self.dis_level < 3:
             x = self.conv_block3(x)
         x = self.conv_block4(x)
         x = self.conv_block5(x)
@@ -77,9 +77,9 @@ class FeaturesDiscriminator(nn.Module):
         return x
 
     def init_weights(self):
-        if self.dis_type == 1:
+        if self.dis_level == 1:
             self.conv_block2.init_weights()
-        if self.dis_type > 3:
+        if self.dis_level < 3:
             self.conv_block3.init_weights()
         self.conv_block4.init_weights()
         self.conv_block5.init_weights()

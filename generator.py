@@ -65,27 +65,33 @@ class ResidualBlock(nn.Module):
 
 class GeneratorBlock(nn.Module):
     # gen_type param is the generator param, default for the regular implementation, res for resnet implementation
-    def __init__(self, in_channels, out_channels, gen_type='default'):
+    def __init__(self, in_channels, out_channels, gen_type='default', with_features=True):
         super().__init__()
         self.gen_type = gen_type
+        self.with_features = with_features
         if gen_type == 'default':
             self.conv_block1 = ConvBlock(in_channels, out_channels, 4, stride=2, padding=1)
             self.features_conv_block = ConvBlock(in_channels, out_channels, 4, stride=2, padding=1)
         else: # resnet generator
             self.conv_block1 = ResidualBlock(in_channels, out_channels)
-            self.upsample = nn.UpsamplingNearest2d(scale_factor=2)
-            self.features_conv_block = ConvBlock(in_channels, out_channels, 3, conv_type='conv')
+            if with_features:
+                self.upsample = nn.UpsamplingNearest2d(scale_factor=2)
+                self.features_conv_block = ConvBlock(in_channels, out_channels, 3, conv_type='conv')
 
     def forward(self, gen, features):
         gen = self.conv_block1(gen)
-        if self.gen_type == 'res':
-            features = self.upsample(features)
-        features = self.features_conv_block(features)
-        return gen + features
+        if self.with_features:
+            if self.gen_type == 'res':
+                features = self.upsample(features)
+            features = self.features_conv_block(features)
+            return gen + features
+        else:
+            return gen
 
     def init_weights(self):
         self.conv_block1.init_weights()
-        self.features_conv_block.init_weights()
+        if self.with_features:
+            self.features_conv_block.init_weights()
 
 
 class Generator(nn.Module):

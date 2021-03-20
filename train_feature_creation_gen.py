@@ -118,7 +118,7 @@ def _main():
     features1_to_image_gen.load_state_dict(torch.load(os.path.join(args.features_gens_dir_path, 'features1_to_image')))
     features1_to_image_gen.eval()
     features1_to_image_gen.to(device)
-    features_generators = [LevelUpFeaturesGenerator(input_level_features=i) for i in range(2, 4)]
+    features_generators = [LevelUpFeaturesGenerator(input_level_features=i) for i in range(2, 5)]
     for i, features_gen in enumerate(features_generators):
         input_level_features = i + 2
         features_gen.to(device)
@@ -129,7 +129,7 @@ def _main():
         else:
             features_gen.init_weights()
 
-    discriminator = FeaturesDiscriminator(args.discriminator_norm, dis_type=args.gen_type, dis_level=3)
+    discriminator = FeaturesDiscriminator(args.discriminator_norm, dis_type=args.gen_type, dis_level=args.train_block_input - 1)
     discriminator.to(device)
     discriminator.init_weights()
 

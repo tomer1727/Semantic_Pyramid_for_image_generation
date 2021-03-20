@@ -57,7 +57,7 @@ class ResidualBlock(nn.Module):
         self.downsample = nn.AvgPool2d(2)
 
     def forward(self, x):
-        residual = self.self.skip_block(x)
+        residual = self.skip_block(x)
         x = self.conv_block1(x)
         x = self.conv_block2(x)
         x += residual
@@ -68,7 +68,7 @@ class ResidualBlock(nn.Module):
     def init_weights(self):
         self.conv_block1.init_weights()
         self.conv_block2.init_weights()
-        self.skip_block.apply(init_weights)
+        self.skip_block.init_weights()
 
 
 class DiscriminatorBlock(nn.Module):
