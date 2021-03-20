@@ -82,6 +82,30 @@ with the followin origin images:
 
 ![image](https://user-images.githubusercontent.com/62801710/111813103-71036880-88e1-11eb-9795-1eb40b5bbd61.png)
 
+ # train_feature_creation_gen.py
+ 
+ This script used to train our features creation model (in this model each generator block is separate to different network and responsible of creating the next level features).
+ This script use to train one block {f2 to f1, f3 to f2, f4 to f3} and it's needed pre trained f1 to image network (example is given in the pre trained generator directory) and the rest of the higher blocks (for example to train f3 to f2, pre trained f2 to f1 is needed). The location of the pre trained blocks will be given as argument.
+ The arguments are mostly the same as train_model.py except two more necessary arguments:
+- features-gens-dir-path: the location of the pre trained generators
+- train-block-input: The block to train (train each block separetly, choose the block by its input layer number)
+
+for example:
+```
+python train_feature_creation_gen.py  [-h] [--batch-size BATCH_SIZE] 
+                                      [--lr LR]
+                                      [--epochs EPOCHS]
+                                      [--model-name MODEL_NAME]
+                                      [--discriminator-norm {batch_norm,instance_norm,layer_norm}]
+                                      [--gradient-penalty-weight GRADIENT_PENALTY_WEIGHT]
+                                      [--discriminator-steps DISCRIMINATOR_STEPS]
+                                      [--gen-type {default,res}]
+                                      [--train-path TRAIN_PATH]
+                                      [--classifier-path CLASSIFIER_PATH]
+                                      --features-gens-dir-path FEATURES_GENS_DIR_PATH
+                                      [--train-block-input {2,3,4}]
+
+```
  
  # Examples:
  Some examples of images created by our model:
