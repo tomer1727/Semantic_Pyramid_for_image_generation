@@ -50,13 +50,14 @@ python3 train_model.py  [-h]  [--batch-size BATCH_SIZE]
  
  # eval_model script
  
- The main testing script. with this script images can be created using pre-trained model. the script repeat the following process: save one batch of images, and create images based on one layer of features at a time. For each layer use several noises (argument) and save grid of output images. The number of samples like this is an argument for the script. Notice that this script will create output images generates from all layer (one at a time) even if the generator was trained with fixed layer (in this case only these featerues will create relevant output).
-necessary running arguments: 
-- full-model-name: the full path to the pre-tained model
+ The main testing script. with this script images can be created using pre-trained model. the script repeat the following process: save one batch of images, and create images based on one layer of features at a time. For each layer use several noises (argument) and save grid of output images. The number of samples like this is an argument for the script. Notice that this script will create output images generates from all layer (one at a time) even if the generator was trained with fixed layer (in this case only these features will create relevant output).
+Necessary running arguments: 
+- generator-path: the full path to the pre-tained generator
 - eval-path: the path to the dataset where the images are sampled from
 - classifier-path: the path to the classifier
 - output-path: where to save the outputs
-Optional arguments {choises} [deafult values]:
+
+Optional arguments {choices} [default values]:
 - batch-size [8]
 - num-of-samples: how many batches to use [5]
 - num-of-noises: how many noise vectors to use per image [4] 
@@ -64,7 +65,7 @@ Optional arguments {choises} [deafult values]:
 
 for example:
 ```
-python3 eval_model.py [-h] --full-model-name FULL_MODEL_NAME
+python3 eval_model.py [-h] --generator-path GENERATOR_PATH
                            --eval-path EVAL_PATH 
                            [--batch-size BATCH_SIZE]
                            [--num-of-samples NUM_OF_SAMPLES]
